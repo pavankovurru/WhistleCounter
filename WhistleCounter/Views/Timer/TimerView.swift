@@ -4,6 +4,7 @@ import SwiftUI
 struct TimerView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.scenePhase) private var scenePhase
 
     @Bindable var settings: AppSettings
     @StateObject private var vm: TimerVM
@@ -68,6 +69,11 @@ struct TimerView: View {
                 didLogCompletion = true
             } else if !isDone {
                 didLogCompletion = false
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                vm.refreshRemainingFromClock()
             }
         }
         .onDisappear {

@@ -16,11 +16,14 @@ final class WhistleDetector: ObservableObject {
 
     private let audioController = WhistleAudioController()
     private var whistleStart: Date?
+    private var isInsideWhistle = false
+    private var lastWhistleCandidateAt = Date.distantPast
     private var lastCountedAt = Date.distantPast
 
-    private let whistleFrequencyRange: ClosedRange<Float> = 700...5000
-    private let minimumWhistleDuration: TimeInterval = 0.22
-    private let cooldownPeriod: TimeInterval = 1.25
+    private let whistleFrequencyRange: ClosedRange<Float> = 850...6000
+    private let minimumWhistleDuration: TimeInterval = 0.14
+    private let minimumSilenceBetweenWhistles: TimeInterval = 0.26
+    private let cooldownPeriod: TimeInterval = 0.95
 
     func start(sensitivity: WhistleSensitivity) {
         guard !isListening, !isStarting else { return }
@@ -48,6 +51,7 @@ final class WhistleDetector: ObservableObject {
         isListening = false
         isStarting = false
         whistleStart = nil
+        isInsideWhistle = false
     }
 
     private func requestPermission(_ completion: @escaping @Sendable (Bool) -> Void) {
@@ -78,7 +82,7 @@ final class WhistleDetector: ObservableObject {
                     if result.isWhistle {
                         self.handleWhistleCandidate()
                     } else {
-                        self.whistleStart = nil
+                        self.handleNonWhistleCandidate()
                     }
                 }
             },
@@ -103,6 +107,9 @@ final class WhistleDetector: ObservableObject {
 
     private func handleWhistleCandidate() {
         let now = Date()
+        lastWhistleCandidateAt = now
+        guard !isInsideWhistle else { return }
+
         if whistleStart == nil {
             whistleStart = now
             return
@@ -115,8 +122,15 @@ final class WhistleDetector: ObservableObject {
         }
 
         lastCountedAt = now
-        self.whistleStart = nil
+        isInsideWhistle = true
         onWhistle?()
+    }
+
+    private func handleNonWhistleCandidate() {
+        let now = Date()
+        guard now.timeIntervalSince(lastWhistleCandidateAt) >= minimumSilenceBetweenWhistles else { return }
+        whistleStart = nil
+        isInsideWhistle = false
     }
 
 }
@@ -145,7 +159,7 @@ private final class WhistleAudioController: @unchecked Sendable {
                 let session = AVAudioSession.sharedInstance()
                 try session.setCategory(.playAndRecord, mode: .measurement, options: [.mixWithOthers, .defaultToSpeaker, .allowBluetoothHFP])
                 try session.setPreferredSampleRate(44_100)
-                try session.setPreferredIOBufferDuration(0.046)
+                try session.setPreferredIOBufferDuration(0.032)
                 try session.setActive(true)
             } catch {
                 onFailed("Microphone setup failed. Check microphone access and try again.")
@@ -289,15 +303,28 @@ private final class WhistleAudioController: @unchecked Sendable {
         }
 
         let averagePower = bandPower / Float(endBin - startBin + 1)
+        let localStart = max(startBin, peakIndex - 18)
+        let localEnd = min(endBin, peakIndex + 18)
+        var localPower: Float = 0
+        var localBins = 0
+        for index in localStart...localEnd where abs(index - peakIndex) > 2 {
+            localPower += magnitudes[index]
+            localBins += 1
+        }
+        let localAveragePower = localPower / Float(max(localBins, 1))
         let dominance = peakPower / max(averagePower, 0.000_001)
+        let localDominance = peakPower / max(localAveragePower, 0.000_001)
         let bandRatio = bandPower / max(totalPower, 0.000_001)
+        let peakShare = peakPower / max(bandPower, 0.000_001)
         let frequency = Float(peakIndex) * frequencyPerBin
-        let dominanceScore = min(max((dominance - 2.2) / 7.0, 0), 1)
-        let bandScore = min(max((bandRatio - 0.18) / 0.42, 0), 1)
+        let dominanceScore = min(max((dominance - 2.0) / 7.0, 0), 1)
+        let localDominanceScore = min(max((localDominance - 5.0) / 16.0, 0), 1)
+        let bandScore = min(max((bandRatio - 0.08) / 0.34, 0), 1)
+        let peakScore = min(max((peakShare - 0.035) / 0.12, 0), 1)
         let amplitudeScore = min(max((rms - minimumAmplitude) / max(minimumAmplitude * 3, 0.001), 0), 1)
-        let confidence = (dominanceScore * 0.48) + (bandScore * 0.34) + (amplitudeScore * 0.18)
-        let hasTonalPeak = dominance >= 3.0
-        let hasFocusedBandEnergy = bandRatio >= 0.20
+        let confidence = (dominanceScore * 0.32) + (localDominanceScore * 0.26) + (bandScore * 0.20) + (peakScore * 0.12) + (amplitudeScore * 0.10)
+        let hasTonalPeak = dominance >= 2.6 || localDominance >= 7.5
+        let hasFocusedBandEnergy = bandRatio >= 0.10 || peakShare >= 0.05
 
         return (hasTonalPeak && hasFocusedBandEnergy && confidence >= minimumConfidence && range.contains(frequency), frequency, confidence)
     }

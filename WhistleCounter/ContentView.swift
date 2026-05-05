@@ -35,19 +35,26 @@ struct ContentView: View {
 
     @ViewBuilder
     private func mainTabs(settings: AppSettings) -> some View {
-        ZStack(alignment: .bottom) {
-            switch activeTab {
-            case .home:
+        TabView(selection: $activeTab) {
+            NavigationStack {
                 HomeView(
                     settings: settings,
                     onStartWhistles: { activeFlow = .whistles(nil) },
                     onStartTimer: { activeFlow = .timer(nil) }
                 )
-            case .cookbooks:
+            }
+            .tag(AppTab.home)
+            .tabItem { Label(AppTab.home.title, systemImage: activeTab == .home ? AppTab.home.selectedIcon : AppTab.home.icon) }
+
+            NavigationStack {
                 CookbooksView(settings: settings) { cookbook in
                     open(cookbook)
                 }
-            case .history:
+            }
+            .tag(AppTab.cookbooks)
+            .tabItem { Label(AppTab.cookbooks.title, systemImage: activeTab == .cookbooks ? AppTab.cookbooks.selectedIcon : AppTab.cookbooks.icon) }
+
+            NavigationStack {
                 HistoryView(settings: settings) { session in
                     let cookbook = Cookbook(
                         name: session.title,
@@ -61,12 +68,21 @@ struct ContentView: View {
                         activeFlow = .timer(cookbook)
                     }
                 }
-            case .settings:
+            }
+            .tag(AppTab.history)
+            .tabItem { Label(AppTab.history.title, systemImage: activeTab == .history ? AppTab.history.selectedIcon : AppTab.history.icon) }
+
+            NavigationStack {
                 SettingsView(settings: settings)
             }
-
-            BottomTabBar(activeTab: $activeTab, dark: settings.darkModeEnabled || colorScheme == .dark, haptics: settings.hapticsEnabled)
-                .opacity(activeFlow == nil ? 1 : 0)
+            .tag(AppTab.settings)
+            .tabItem { Label(AppTab.settings.title, systemImage: activeTab == .settings ? AppTab.settings.selectedIcon : AppTab.settings.icon) }
+        }
+        .tint(WhistleTheme.orange)
+        .toolbarBackground(.visible, for: .tabBar)
+        .toolbarBackground(.ultraThinMaterial, for: .tabBar)
+        .onChange(of: activeTab) { _, _ in
+            HapticManager.selection(enabled: settings.hapticsEnabled)
         }
         .fullScreenCover(item: $activeFlow) { flow in
             switch flow {

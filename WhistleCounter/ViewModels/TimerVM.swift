@@ -13,6 +13,9 @@ final class TimerVM: ObservableObject {
 
     var sourceCookbook: Cookbook?
     private var ticker: Timer?
+    private var expectedEndDate: Date?
+    private var activeSoundPack: SoundPack = .classic
+    private var activeHaptics = true
 
     init(cookbook: Cookbook?) {
         let duration = cookbook?.timerDuration ?? 15 * 60
@@ -28,6 +31,7 @@ final class TimerVM: ObservableObject {
 
     func setDuration(_ duration: TimeInterval) {
         let clamped = min(max(duration, 1), 12 * 60 * 60)
+        expectedEndDate = nil
         totalDuration = clamped
         remaining = clamped
         isDone = false
@@ -36,6 +40,9 @@ final class TimerVM: ObservableObject {
 
     func start(soundPack: SoundPack, haptics: Bool) {
         guard remaining > 0 else { return }
+        activeSoundPack = soundPack
+        activeHaptics = haptics
+        expectedEndDate = Date().addingTimeInterval(remaining)
         isRunning = true
         isDone = false
         scheduleNotification()
@@ -48,7 +55,9 @@ final class TimerVM: ObservableObject {
     }
 
     func pause() {
+        refreshRemainingFromClock(finishIfNeeded: false)
         isRunning = false
+        expectedEndDate = nil
         ticker?.invalidate()
         ticker = nil
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["WhistleCounterTimer"])
@@ -61,6 +70,7 @@ final class TimerVM: ObservableObject {
     func reset() {
         pause()
         AudioPlayer.shared.stopAlarm()
+        expectedEndDate = nil
         remaining = totalDuration
         isDone = false
         showDonePopup = false
@@ -69,16 +79,27 @@ final class TimerVM: ObservableObject {
 
     private func tick(soundPack: SoundPack, haptics: Bool) {
         guard isRunning else { return }
-        if remaining <= 1 {
+        refreshRemainingFromClock(finishIfNeeded: false)
+        if remaining <= 0 {
             remaining = 0
             finish(soundPack: soundPack, haptics: haptics)
-        } else {
-            remaining -= 1
+        }
+    }
+
+    func refreshRemainingFromClock(finishIfNeeded: Bool = true) {
+        guard let expectedEndDate else { return }
+        remaining = max(0, expectedEndDate.timeIntervalSinceNow.rounded(.up))
+        if finishIfNeeded, isRunning, remaining <= 0 {
+            finish(soundPack: activeSoundPack, haptics: activeHaptics)
         }
     }
 
     private func finish(soundPack: SoundPack, haptics: Bool) {
-        pause()
+        isRunning = false
+        expectedEndDate = nil
+        ticker?.invalidate()
+        ticker = nil
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["WhistleCounterTimer"])
         isDone = true
         showDonePopup = true
         showConfetti = true
