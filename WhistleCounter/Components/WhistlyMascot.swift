@@ -15,6 +15,7 @@ struct WhistlyMascot: View {
     var theme: MascotTheme = .default
     var size: CGFloat = 180
     var showsSteamPuffs = true
+    var isAnimated = true
 
     @State private var motion = false
 
@@ -38,15 +39,22 @@ struct WhistlyMascot: View {
                     .font(.system(size: 32 * u, weight: .black, design: .rounded))
                     .foregroundStyle(.red)
                     .position(x: 174 * u, y: 18 * u)
-                    .scaleEffect(motion ? 1.18 : 0.92)
+                    .scaleEffect(activeMotion ? 1.18 : 0.92)
             }
         }
         .frame(width: size, height: size)
         .scaleEffect(wrapperScale)
         .rotationEffect(.degrees(wrapperRotation))
         .offset(y: wrapperYOffset)
-        .animation(wrapperAnimation, value: motion)
-        .onAppear { motion = true }
+        .animation(isAnimated ? wrapperAnimation : nil, value: motion)
+        .onAppear {
+            guard isAnimated else { return }
+            motion = true
+        }
+    }
+
+    private var activeMotion: Bool {
+        isAnimated && motion
     }
 
     private var colors: WhistlyColors {
@@ -65,26 +73,26 @@ struct WhistlyMascot: View {
     private var wrapperScale: CGFloat {
         switch state {
         case .bouncing:
-            motion ? 1.04 : 0.98
+            activeMotion ? 1.04 : 0.98
         case .celebrating:
-            motion ? 1.05 : 0.99
+            activeMotion ? 1.05 : 0.99
         case .shocked:
             1.0
         case .sleeping:
-            motion ? 1.025 : 1.0
+            activeMotion ? 1.025 : 1.0
         default:
-            motion ? 1.018 : 1.0
+            activeMotion ? 1.018 : 1.0
         }
     }
 
     private var wrapperRotation: Double {
         switch state {
         case .waving:
-            motion ? 4 : -4
+            activeMotion ? 4 : -4
         case .shocked:
-            motion ? 3 : -3
+            activeMotion ? 3 : -3
         case .celebrating:
-            motion ? 3 : -3
+            activeMotion ? 3 : -3
         default:
             0
         }
@@ -93,11 +101,11 @@ struct WhistlyMascot: View {
     private var wrapperYOffset: CGFloat {
         switch state {
         case .bouncing:
-            motion ? -12 : 0
+            activeMotion ? -12 : 0
         case .celebrating:
-            motion ? -16 : 0
+            activeMotion ? -16 : 0
         case .sleeping:
-            motion ? 2 : 0
+            activeMotion ? 2 : 0
         default:
             0
         }
@@ -315,10 +323,10 @@ struct WhistlyMascot: View {
                 .rotationEffect(.degrees(-10), anchor: .topTrailing)
                 .position(x: 12 * u, y: 128 * u)
 
-            armWithHand(u, x: 184 * u, y: 83 * u, angle: motion ? 34 : 56)
+            armWithHand(u, x: 184 * u, y: 83 * u, angle: activeMotion ? 34 : 56)
         } else if state == .celebrating {
-            armWithHand(u, x: 16 * u, y: 78 * u, angle: motion ? -50 : -30)
-            armWithHand(u, x: 184 * u, y: 78 * u, angle: motion ? 50 : 30)
+            armWithHand(u, x: 16 * u, y: 78 * u, angle: activeMotion ? -50 : -30)
+            armWithHand(u, x: 184 * u, y: 78 * u, angle: activeMotion ? 50 : 30)
         }
     }
 
@@ -337,7 +345,7 @@ struct WhistlyMascot: View {
         .frame(width: 28 * u, height: 66 * u)
         .rotationEffect(.degrees(angle), anchor: .bottom)
         .position(x: x, y: y)
-        .animation(.easeInOut(duration: 0.55).repeatForever(autoreverses: true), value: motion)
+        .animation(isAnimated ? .easeInOut(duration: 0.55).repeatForever(autoreverses: true) : nil, value: motion)
     }
 
     private func zzz(_ u: CGFloat) -> some View {
@@ -354,9 +362,9 @@ struct WhistlyMascot: View {
                     .font(.system(size: 16 * u, weight: .black, design: .rounded))
                     .offset(x: 27 * u, y: 6 * u)
             }
-            .position(x: 166 * u, y: motion ? -2 * u : 16 * u)
-            .opacity(motion ? 0.05 : 1)
-            .animation(.easeOut(duration: 2.0).repeatForever(autoreverses: false), value: motion)
+            .position(x: 166 * u, y: activeMotion ? -2 * u : 16 * u)
+            .opacity(activeMotion ? 0.05 : 1)
+            .animation(isAnimated ? .easeOut(duration: 2.0).repeatForever(autoreverses: false) : nil, value: motion)
     }
 }
 

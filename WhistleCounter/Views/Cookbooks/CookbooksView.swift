@@ -389,18 +389,9 @@ struct CookbookEditorSheet: View {
 
     private func editorHeader(compact: Bool) -> some View {
         VStack(alignment: .leading, spacing: compact ? 2 : 4) {
-            Text(cookbook == nil ? "New recipe" : "Edit recipe")
-                .font(.nunito(13, weight: .black))
-                .foregroundStyle(WhistleTheme.secondaryText(dark: dark))
-                .textCase(.uppercase)
             Text(cookbook == nil ? "Add Cookbook" : "Tune Cookbook")
                 .font(.fredoka(compact ? 28 : 32, weight: .black))
                 .foregroundStyle(WhistleTheme.text(dark: dark))
-            Text("Save one simple setup: either whistles or a timer.")
-                .font(.nunito(compact ? 12 : 14, weight: .black))
-                .foregroundStyle(WhistleTheme.secondaryText(dark: dark))
-                .lineLimit(1)
-                .minimumScaleFactor(0.78)
         }
     }
 
@@ -506,14 +497,15 @@ struct CookbookEditorSheet: View {
             title: cookbook == nil ? "Save Cookbook" : "Save Changes",
             systemImage: "checkmark",
             color: WhistleTheme.mint,
-            fontSize: compact ? 17 : 19,
+            fontSize: 17,
             horizontalPadding: 18,
-            verticalPadding: compact ? 14 : 17,
-            cornerRadius: 26,
-            fullWidth: true
+            verticalPadding: 14,
+            cornerRadius: 24
         ) {
             saveDraft()
         }
+        .frame(maxWidth: 235)
+        .frame(maxWidth: .infinity, alignment: .center)
     }
 
     private func editorCard<Content: View>(title: String, icon: String, tint: Color, fill: Color? = nil, compact: Bool = false, @ViewBuilder content: () -> Content) -> some View {

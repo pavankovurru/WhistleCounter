@@ -7,8 +7,6 @@ struct HomeView: View {
     var onStartWhistles: () -> Void
     var onStartTimer: () -> Void
 
-    @State private var mascotState: WhistlyState = .idle
-
     private var dark: Bool { settings.darkModeEnabled || colorScheme == .dark }
 
     var body: some View {
@@ -21,7 +19,11 @@ struct HomeView: View {
                         .padding(.top, 8)
 
                     VStack(spacing: 24) {
-                        WhistlyMascot(state: mascotState, theme: MascotTheme.resolved(from: settings.mascotTheme), size: mascotSize(for: proxy.size.height))
+                        WhistlyMascot(
+                            state: .idle,
+                            theme: MascotTheme.resolved(from: settings.mascotTheme),
+                            size: mascotSize(for: proxy.size.height)
+                        )
                             .frame(maxWidth: .infinity)
                             .frame(height: mascotSize(for: proxy.size.height))
 
@@ -52,7 +54,6 @@ struct HomeView: View {
         }
         .onAppear {
             AudioPlayer.shared.startBackgroundMusic(enabled: settings.backgroundMusicEnabled)
-            scheduleMascotMoods()
         }
         .onChange(of: settings.backgroundMusicEnabled) { _, enabled in
             enabled ? AudioPlayer.shared.startBackgroundMusic(enabled: true) : AudioPlayer.shared.stopBackgroundMusic()
@@ -102,14 +103,14 @@ struct HomeView: View {
         Button(action: action) {
             HStack(spacing: 16) {
                 Image(systemName: icon)
-                    .font(.system(size: 28, weight: .black))
+                    .font(.system(size: 24, weight: .black))
                     .foregroundStyle(.white)
-                    .frame(width: 58, height: 58)
-                    .background(.white.opacity(0.22), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .frame(width: 50, height: 50)
+                    .background(.white.opacity(0.22), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title)
-                        .font(.fredoka(24, weight: .black))
+                        .font(.fredoka(21, weight: .black))
                         .lineLimit(1)
                         .minimumScaleFactor(0.68)
                     Text(subtitle)
@@ -126,31 +127,18 @@ struct HomeView: View {
                     .font(.system(size: 22, weight: .black))
             }
             .foregroundStyle(.white)
-            .frame(maxWidth: .infinity, minHeight: 82, alignment: .leading)
-            .padding(22)
+            .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
+            .padding(18)
             .background {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 30, style: .continuous)
+                    RoundedRectangle(cornerRadius: 26, style: .continuous)
                         .fill(color.darkened(0.43).opacity(0.74))
-                        .offset(y: 6.5)
-                    RoundedRectangle(cornerRadius: 30, style: .continuous)
+                        .offset(y: 5.5)
+                    RoundedRectangle(cornerRadius: 26, style: .continuous)
                         .fill(color)
                 }
             }
         }
         .buttonStyle(.plain)
-    }
-
-    private func scheduleMascotMoods() {
-        Task {
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(Int.random(in: 8...12)))
-                await MainActor.run {
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.65)) {
-                        mascotState = [.idle, .waving, .bouncing].randomElement() ?? .idle
-                    }
-                }
-            }
-        }
     }
 }

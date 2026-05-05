@@ -156,9 +156,11 @@ struct WhistleCounterView: View {
             let frequency = Int(vm.detector.lastDetectedFrequency)
             if frequency > 0 {
                 let confidence = Int((vm.detector.lastConfidence * 100).rounded())
-                return "Listening live. \(frequency) Hz tone, \(confidence)% match"
+                let level = Int((min(vm.detector.lastInputLevel * 100, 1) * 100).rounded())
+                return "Listening live. \(frequency) Hz tone, \(confidence)% match, \(level)% level"
             }
-            return "Listening live. Waiting for cooker steam."
+            let level = Int((min(vm.detector.lastInputLevel * 100, 1) * 100).rounded())
+            return level > 0 ? "Listening live. Audio level \(level)%, no whistle yet." : "Listening live. Waiting for cooker steam."
         }
 
         if vm.count > 0 {

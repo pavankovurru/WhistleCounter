@@ -57,17 +57,17 @@ enum WhistleSensitivity: String, CaseIterable, Identifiable {
 
     nonisolated var minimumAmplitude: Float {
         switch self {
-        case .low: 0.055
-        case .medium: 0.025
-        case .high: 0.012
+        case .low: 0.012
+        case .medium: 0.006
+        case .high: 0.0025
         }
     }
 
     nonisolated var minimumConfidence: Float {
         switch self {
-        case .low: 0.72
-        case .medium: 0.54
-        case .high: 0.40
+        case .low: 0.66
+        case .medium: 0.45
+        case .high: 0.32
         }
     }
 }

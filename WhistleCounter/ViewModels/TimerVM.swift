@@ -32,6 +32,7 @@ final class TimerVM: ObservableObject {
     func setDuration(_ duration: TimeInterval) {
         let clamped = min(max(duration, 1), 12 * 60 * 60)
         expectedEndDate = nil
+        LiveActivityManager.shared.end(finalStatus: "Timer reset", dismissalDelay: 1)
         totalDuration = clamped
         remaining = clamped
         isDone = false
@@ -45,6 +46,7 @@ final class TimerVM: ObservableObject {
         expectedEndDate = Date().addingTimeInterval(remaining)
         isRunning = true
         isDone = false
+        LiveActivityManager.shared.startTimer(title: sourceCookbook?.name ?? "Kitchen Timer", remaining: remaining, total: totalDuration)
         scheduleNotification()
         ticker?.invalidate()
         ticker = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
@@ -58,6 +60,7 @@ final class TimerVM: ObservableObject {
         refreshRemainingFromClock(finishIfNeeded: false)
         isRunning = false
         expectedEndDate = nil
+        LiveActivityManager.shared.updateTimer(remaining: remaining, total: totalDuration, isRunning: false, isFinished: false)
         ticker?.invalidate()
         ticker = nil
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["WhistleCounterTimer"])
@@ -71,6 +74,7 @@ final class TimerVM: ObservableObject {
         pause()
         AudioPlayer.shared.stopAlarm()
         expectedEndDate = nil
+        LiveActivityManager.shared.end(finalStatus: "Timer reset")
         remaining = totalDuration
         isDone = false
         showDonePopup = false
@@ -89,6 +93,7 @@ final class TimerVM: ObservableObject {
     func refreshRemainingFromClock(finishIfNeeded: Bool = true) {
         guard let expectedEndDate else { return }
         remaining = max(0, expectedEndDate.timeIntervalSinceNow.rounded(.up))
+        LiveActivityManager.shared.updateTimer(remaining: remaining, total: totalDuration, isRunning: isRunning, isFinished: false)
         if finishIfNeeded, isRunning, remaining <= 0 {
             finish(soundPack: activeSoundPack, haptics: activeHaptics)
         }
@@ -103,6 +108,7 @@ final class TimerVM: ObservableObject {
         isDone = true
         showDonePopup = true
         showConfetti = true
+        LiveActivityManager.shared.end(finalStatus: "Time's up")
         AudioPlayer.shared.playAlarm(pack: soundPack)
         HapticManager.warning(enabled: haptics)
     }

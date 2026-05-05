@@ -49,12 +49,17 @@ final class WhistleCounterVM: ObservableObject {
 
     func startListening(sensitivity: WhistleSensitivity) {
         detector.start(sensitivity: sensitivity)
+        LiveActivityManager.shared.startWhistle(title: sourceCookbook?.name ?? "Whistle Counter", count: count, target: target)
         mascotState = .bouncing
         milestone = "Setting up the microphone..."
     }
 
     func stopListening() {
         detector.stop()
+        LiveActivityManager.shared.updateWhistle(count: count, target: target, isListening: false, isFinished: count >= target)
+        if count == 0 || count >= target {
+            LiveActivityManager.shared.end(finalStatus: count >= target ? "Target reached" : "Stopped")
+        }
         mascotState = .idle
         refreshMilestone()
     }
@@ -68,9 +73,11 @@ final class WhistleCounterVM: ObservableObject {
         count += 1
         mascotState = .bouncing
         refreshMilestone()
+        LiveActivityManager.shared.updateWhistle(count: count, target: target, isListening: detector.isListening, isFinished: count >= target)
 
         if count >= target {
             detector.stop()
+            LiveActivityManager.shared.end(finalStatus: "Target reached")
             mascotState = .celebrating
             showConfetti = true
             showReadyPopup = true
@@ -79,6 +86,7 @@ final class WhistleCounterVM: ObservableObject {
 
     func reset() {
         detector.stop()
+        LiveActivityManager.shared.end(finalStatus: "Reset")
         count = 0
         mascotState = .idle
         showReadyPopup = false
@@ -90,6 +98,7 @@ final class WhistleCounterVM: ObservableObject {
         target = min(20, max(1, newTarget))
         count = min(count, target)
         refreshMilestone()
+        LiveActivityManager.shared.updateWhistle(count: count, target: target, isListening: detector.isListening, isFinished: count >= target)
     }
 
     private func refreshMilestone() {

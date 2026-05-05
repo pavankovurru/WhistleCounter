@@ -45,7 +45,13 @@ struct SettingsView: View {
             ZStack {
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
                     .fill(WhistleTheme.sunny)
-                WhistlyMascot(state: .idle, theme: MascotTheme.resolved(from: settings.mascotTheme), size: 68, showsSteamPuffs: false)
+                WhistlyMascot(
+                    state: .idle,
+                    theme: MascotTheme.resolved(from: settings.mascotTheme),
+                    size: 68,
+                    showsSteamPuffs: false,
+                    isAnimated: false
+                )
                     .offset(y: -3)
             }
             .frame(width: 86, height: 86)
@@ -111,7 +117,8 @@ struct SettingsView: View {
                     let levels = WhistleSensitivity.allCases
                     let activeIndex = levels.firstIndex { $0.rawValue == settings.sensitivity } ?? 1
                     let width = max(proxy.size.width, 1)
-                    let x = width * (CGFloat(activeIndex) + 0.5) / CGFloat(levels.count)
+                    let progress = CGFloat(activeIndex + 1) / CGFloat(levels.count)
+                    let fillWidth = width * progress
 
                     ZStack(alignment: .leading) {
                         Capsule()
@@ -119,7 +126,7 @@ struct SettingsView: View {
                             .frame(height: 12)
                         Capsule()
                             .fill(sensitivityColor(levels[activeIndex]))
-                            .frame(width: max(16, x), height: 12)
+                            .frame(width: max(16, fillWidth), height: 12)
                         Circle()
                             .fill(WhistleTheme.card(dark: dark))
                             .frame(width: 26, height: 26)
@@ -129,7 +136,7 @@ struct SettingsView: View {
                                     .frame(width: 16, height: 16)
                             }
                             .shadow(color: WhistleTheme.shadow(dark: dark), radius: 5, y: 2)
-                            .offset(x: max(0, min(width - 26, x - 13)))
+                            .offset(x: max(0, min(width - 26, fillWidth - 13)))
                     }
                     .animation(.spring(response: 0.3, dampingFraction: 0.72), value: settings.sensitivity)
                 }
@@ -330,7 +337,13 @@ struct SettingsView: View {
             }
         } label: {
             VStack(spacing: 5) {
-                WhistlyMascot(state: .idle, theme: theme, size: 58)
+                WhistlyMascot(
+                    state: .idle,
+                    theme: theme,
+                    size: 58,
+                    showsSteamPuffs: false,
+                    isAnimated: false
+                )
                     .frame(height: 54)
                 Text(theme.rawValue)
                     .font(.fredoka(11, weight: .black))

@@ -144,7 +144,13 @@ struct HistoryView: View {
 
     private var emptyState: some View {
         VStack(spacing: 12) {
-            WhistlyMascot(state: .idle, theme: MascotTheme.resolved(from: settings.mascotTheme), size: 150)
+            WhistlyMascot(
+                state: .idle,
+                theme: MascotTheme.resolved(from: settings.mascotTheme),
+                size: 150,
+                showsSteamPuffs: false,
+                isAnimated: false
+            )
             Text("No cooking history yet")
                 .font(.fredoka(22, weight: .black))
                 .foregroundStyle(WhistleTheme.text(dark: dark))
@@ -278,7 +284,6 @@ struct HistoryRow: View {
         .background {
             RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .fill(WhistleTheme.card(dark: dark))
-                .shadow(color: WhistleTheme.shadow(dark: dark), radius: 7, y: 3)
         }
     }
 
@@ -400,15 +405,15 @@ struct ShareableSessionCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
         .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(LinearGradient(colors: [WhistleTheme.sunny, WhistleTheme.orange], startPoint: .topLeading, endPoint: .bottomTrailing))
-                .shadow(color: WhistleTheme.orange.darkened(0.24).opacity(0.42), radius: 12, y: 6)
+            LinearGradient(colors: [WhistleTheme.sunny, WhistleTheme.orange], startPoint: .topLeading, endPoint: .bottomTrailing)
         )
         .overlay(alignment: .bottomTrailing) {
             Text(session.emoji)
-                .font(.system(size: 84))
-                .opacity(0.25)
-                .offset(x: 8, y: 18)
+                .font(.system(size: 72))
+                .opacity(0.22)
+                .padding(8)
         }
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .shadow(color: WhistleTheme.orange.darkened(0.24).opacity(0.22), radius: 8, y: 4)
     }
 }

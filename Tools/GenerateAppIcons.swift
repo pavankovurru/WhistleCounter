@@ -67,19 +67,19 @@ let variants: [(String, IconPalette)] = [
     (
         "WhistleCounterIconLight.png",
         IconPalette(
-            backgroundTop: cream,
-            backgroundBottom: RGBA(hex: 0xFFE189),
-            glow: sunny,
+            backgroundTop: RGBA(hex: 0xFFFDF8),
+            backgroundBottom: cream,
+            glow: RGBA(hex: 0xFFEED8),
             body: orange,
             belly: sunny,
-            shadow: RGBA(hex: 0x9A341B),
+            shadow: RGBA(hex: 0xB87858),
             cheek: RGBA(1.0, 0.41, 0.51)
         )
     ),
     (
         "WhistleCounterIconDark.png",
         IconPalette(
-            backgroundTop: RGBA(hex: 0x13233F),
+            backgroundTop: RGBA(hex: 0x252542),
             backgroundBottom: navy,
             glow: RGBA(hex: 0xE8A045),
             body: RGBA(hex: 0xFF7A3D),
@@ -91,12 +91,12 @@ let variants: [(String, IconPalette)] = [
     (
         "WhistleCounterIconTinted.png",
         IconPalette(
-            backgroundTop: RGBA(hex: 0xD7FFF0),
-            backgroundBottom: RGBA(hex: 0x58D5BF),
-            glow: RGBA(hex: 0xFFF1A6),
-            body: RGBA(hex: 0xFF8A4C),
-            belly: RGBA(hex: 0xFFF5B8),
-            shadow: RGBA(hex: 0x176B63),
+            backgroundTop: RGBA(hex: 0xFFFDF8),
+            backgroundBottom: cream,
+            glow: RGBA(hex: 0xFFEBD6),
+            body: RGBA(hex: 0xF86A32),
+            belly: RGBA(hex: 0xFFD93D),
+            shadow: RGBA(hex: 0xB87858),
             cheek: RGBA(hex: 0xFF8AA8)
         )
     )
@@ -222,8 +222,8 @@ func fill(_ ctx: CGContext, _ path: CGPath, _ color: RGBA) {
 func drawBackground(_ ctx: CGContext, palette: IconPalette) {
     let canvas = CGRect(x: 0, y: 0, width: size, height: size)
     fillLinear(ctx, path: CGPath(rect: canvas, transform: nil), colors: [palette.backgroundTop, palette.backgroundBottom], start: .zero, end: CGPoint(x: 1024, y: 1024))
-    fill(ctx, CGPath(ellipseIn: CGRect(x: -96, y: -80, width: 560, height: 560), transform: nil), palette.glow.opacity(0.44))
-    fill(ctx, CGPath(ellipseIn: CGRect(x: 610, y: 90, width: 340, height: 340), transform: nil), mint.opacity(0.14))
+    fill(ctx, CGPath(ellipseIn: CGRect(x: -96, y: -80, width: 560, height: 560), transform: nil), palette.glow.opacity(0.18))
+    fill(ctx, CGPath(ellipseIn: CGRect(x: 610, y: 90, width: 340, height: 340), transform: nil), mint.opacity(0.08))
 }
 
 func drawWhistle(_ ctx: CGContext, palette: IconPalette) {

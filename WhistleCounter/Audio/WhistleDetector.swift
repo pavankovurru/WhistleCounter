@@ -10,6 +10,7 @@ final class WhistleDetector: ObservableObject {
     @Published var permissionDenied = false
     @Published var lastDetectedFrequency: Float = 0
     @Published var lastConfidence: Float = 0
+    @Published var lastInputLevel: Float = 0
     @Published var errorMessage: String?
 
     var onWhistle: (() -> Void)?
@@ -79,6 +80,7 @@ final class WhistleDetector: ObservableObject {
                     guard let self, self.isListening else { return }
                     self.lastDetectedFrequency = result.frequency
                     self.lastConfidence = result.confidence
+                    self.lastInputLevel = result.inputLevel
                     if result.isWhistle {
                         self.handleWhistleCandidate()
                     } else {
@@ -143,7 +145,7 @@ private final class WhistleAudioController: @unchecked Sendable {
     nonisolated func start(
         sensitivity: WhistleSensitivity,
         range: ClosedRange<Float>,
-        onAnalysis: @escaping @Sendable ((isWhistle: Bool, frequency: Float, confidence: Float)) -> Void,
+        onAnalysis: @escaping @Sendable ((isWhistle: Bool, frequency: Float, confidence: Float, inputLevel: Float)) -> Void,
         onStarted: @escaping @Sendable () -> Void,
         onFailed: @escaping @Sendable (String) -> Void
     ) {
@@ -157,7 +159,10 @@ private final class WhistleAudioController: @unchecked Sendable {
             #if os(iOS)
             do {
                 let session = AVAudioSession.sharedInstance()
-                try session.setCategory(.playAndRecord, mode: .measurement, options: [.mixWithOthers, .defaultToSpeaker, .allowBluetoothHFP])
+                try session.setCategory(.playAndRecord, mode: .measurement, options: [.mixWithOthers, .defaultToSpeaker])
+                if let builtInMic = session.availableInputs?.first(where: { $0.portType == .builtInMic }) {
+                    try? session.setPreferredInput(builtInMic)
+                }
                 try session.setPreferredSampleRate(44_100)
                 try session.setPreferredIOBufferDuration(0.032)
                 try session.setActive(true)
@@ -227,36 +232,41 @@ private final class WhistleAudioController: @unchecked Sendable {
         range: ClosedRange<Float>,
         minimumAmplitude: Float,
         minimumConfidence: Float
-    ) -> (isWhistle: Bool, frequency: Float, confidence: Float) {
-        guard sampleRate > 0, let channelData = buffer.floatChannelData else { return (false, 0, 0) }
+    ) -> (isWhistle: Bool, frequency: Float, confidence: Float, inputLevel: Float) {
+        guard sampleRate > 0, let channelData = buffer.floatChannelData else { return (false, 0, 0, 0) }
 
         let fftSize = 4096
-        let frameCount = min(Int(buffer.frameLength), fftSize)
-        guard frameCount >= fftSize else { return (false, 0, 0) }
+        let usableFrameCount = min(Int(buffer.frameLength), fftSize)
+        guard usableFrameCount >= 512 else { return (false, 0, 0, 0) }
 
         var samples = [Float](repeating: 0, count: fftSize)
         let channelCount = max(1, min(Int(buffer.format.channelCount), 2))
         for channel in 0..<channelCount {
             let source = channelData[channel]
-            for index in 0..<fftSize {
+            for index in 0..<usableFrameCount {
                 samples[index] += source[index] / Float(channelCount)
             }
         }
 
         var rms: Float = 0
-        vDSP_rmsqv(samples, 1, &rms, vDSP_Length(fftSize))
-        guard rms >= minimumAmplitude else { return (false, 0, 0) }
+        vDSP_rmsqv(samples, 1, &rms, vDSP_Length(usableFrameCount))
+        guard rms >= minimumAmplitude else { return (false, 0, 0, rms) }
+
+        var mean: Float = 0
+        vDSP_meanv(samples, 1, &mean, vDSP_Length(usableFrameCount))
+        var negativeMean = -mean
+        vDSP_vsadd(samples, 1, &negativeMean, &samples, 1, vDSP_Length(usableFrameCount))
 
         var window = [Float](repeating: 0, count: fftSize)
-        vDSP_hann_window(&window, vDSP_Length(fftSize), Int32(vDSP_HANN_NORM))
+        vDSP_hann_window(&window, vDSP_Length(usableFrameCount), Int32(vDSP_HANN_NORM))
         var windowed = [Float](repeating: 0, count: fftSize)
-        vDSP_vmul(samples, 1, window, 1, &windowed, 1, vDSP_Length(fftSize))
+        vDSP_vmul(samples, 1, window, 1, &windowed, 1, vDSP_Length(usableFrameCount))
 
         let halfSize = fftSize / 2
         var real = [Float](repeating: 0, count: halfSize)
         var imaginary = [Float](repeating: 0, count: halfSize)
         let log2Size = vDSP_Length(log2(Float(fftSize)))
-        guard let setup = vDSP_create_fftsetup(log2Size, FFTRadix(kFFTRadix2)) else { return (false, 0, 0) }
+        guard let setup = vDSP_create_fftsetup(log2Size, FFTRadix(kFFTRadix2)) else { return (false, 0, 0, rms) }
         defer { vDSP_destroy_fftsetup(setup) }
 
         windowed.withUnsafeBufferPointer { pointer in
@@ -282,7 +292,7 @@ private final class WhistleAudioController: @unchecked Sendable {
         let frequencyPerBin = sampleRate / Float(fftSize)
         let startBin = max(1, Int(range.lowerBound / frequencyPerBin))
         let endBin = min(halfSize - 1, Int(range.upperBound / frequencyPerBin))
-        guard startBin < endBin else { return (false, 0, 0) }
+        guard startBin < endBin else { return (false, 0, 0, rms) }
 
         var peakPower: Float = 0
         var peakIndex = startBin
@@ -317,15 +327,15 @@ private final class WhistleAudioController: @unchecked Sendable {
         let bandRatio = bandPower / max(totalPower, 0.000_001)
         let peakShare = peakPower / max(bandPower, 0.000_001)
         let frequency = Float(peakIndex) * frequencyPerBin
-        let dominanceScore = min(max((dominance - 2.0) / 7.0, 0), 1)
-        let localDominanceScore = min(max((localDominance - 5.0) / 16.0, 0), 1)
-        let bandScore = min(max((bandRatio - 0.08) / 0.34, 0), 1)
-        let peakScore = min(max((peakShare - 0.035) / 0.12, 0), 1)
+        let dominanceScore = min(max((dominance - 1.8) / 6.0, 0), 1)
+        let localDominanceScore = min(max((localDominance - 4.0) / 14.0, 0), 1)
+        let bandScore = min(max((bandRatio - 0.045) / 0.30, 0), 1)
+        let peakScore = min(max((peakShare - 0.025) / 0.11, 0), 1)
         let amplitudeScore = min(max((rms - minimumAmplitude) / max(minimumAmplitude * 3, 0.001), 0), 1)
         let confidence = (dominanceScore * 0.32) + (localDominanceScore * 0.26) + (bandScore * 0.20) + (peakScore * 0.12) + (amplitudeScore * 0.10)
-        let hasTonalPeak = dominance >= 2.6 || localDominance >= 7.5
-        let hasFocusedBandEnergy = bandRatio >= 0.10 || peakShare >= 0.05
+        let hasTonalPeak = dominance >= 2.2 || localDominance >= 5.8
+        let hasFocusedBandEnergy = bandRatio >= 0.055 || peakShare >= 0.035
 
-        return (hasTonalPeak && hasFocusedBandEnergy && confidence >= minimumConfidence && range.contains(frequency), frequency, confidence)
+        return (hasTonalPeak && hasFocusedBandEnergy && confidence >= minimumConfidence && range.contains(frequency), frequency, confidence, rms)
     }
 }
