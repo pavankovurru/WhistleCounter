@@ -9,6 +9,7 @@ struct TimerView: View {
     @Bindable var settings: AppSettings
     @StateObject private var vm: TimerVM
     @State private var didLogCompletion = false
+    @State private var didSaveCookbook = false
     var onClose: () -> Void
 
     private let maxRingMinutes = 180
@@ -103,7 +104,9 @@ struct TimerView: View {
                     totalProgress: ringTotalProgress,
                     tint: WhistleTheme.mint,
                     dark: dark,
-                    isEnabled: !vm.isRunning && !vm.isDone,
+                    // Disable drag once countdown has started to prevent accidentally
+                    // wiping the remaining time while the timer is paused mid-way.
+                    isEnabled: !vm.isRunning && !vm.isDone && !isCountdownActive,
                     isCountdownMode: isCountdownActive,
                     haptics: settings.hapticsEnabled,
                     maxMinutes: maxRingMinutes
@@ -402,6 +405,8 @@ struct TimerView: View {
     }
 
     private func saveTimer() {
+        guard !didSaveCookbook else { return }
+        didSaveCookbook = true
         HapticManager.success(enabled: settings.hapticsEnabled)
         modelContext.insert(Cookbook(name: "Quick \(vm.totalDuration.shortDurationText)", timerDuration: vm.totalDuration, emoji: "⏱", createdAt: Date()))
     }

@@ -39,6 +39,7 @@ struct ContentView: View {
             NavigationStack {
                 HomeView(
                     settings: settings,
+                    isVisible: activeTab == .home,
                     onStartWhistles: { activeFlow = .whistles(nil) },
                     onStartTimer: { activeFlow = .timer(nil) },
                     onOpenCookbook: open

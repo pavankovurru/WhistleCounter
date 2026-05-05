@@ -32,7 +32,8 @@ final class TimerVM: ObservableObject {
     func setDuration(_ duration: TimeInterval) {
         let clamped = min(max(duration, 1), 12 * 60 * 60)
         expectedEndDate = nil
-        LiveActivityManager.shared.end(finalStatus: "Timer reset", dismissalDelay: 1)
+        // Do NOT touch LiveActivity here — setDuration is called on every ring drag frame.
+        // LiveActivity lifecycle is managed only by start / pause / reset.
         totalDuration = clamped
         remaining = clamped
         isDone = false
@@ -57,13 +58,17 @@ final class TimerVM: ObservableObject {
     }
 
     func pause() {
-        refreshRemainingFromClock(finishIfNeeded: false)
+        // Snap remaining to clock BEFORE changing isRunning so the LA update is accurate
+        if let end = expectedEndDate {
+            remaining = max(0, end.timeIntervalSinceNow.rounded(.up))
+        }
         isRunning = false
         expectedEndDate = nil
-        LiveActivityManager.shared.updateTimer(remaining: remaining, total: totalDuration, isRunning: false, isFinished: false)
         ticker?.invalidate()
         ticker = nil
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["WhistleCounterTimer"])
+        // Send single correct update — isRunning is now false
+        LiveActivityManager.shared.updateTimer(remaining: remaining, total: totalDuration, isRunning: false, isFinished: false)
     }
 
     func toggle(soundPack: SoundPack, haptics: Bool) {
@@ -114,7 +119,12 @@ final class TimerVM: ObservableObject {
     }
 
     private func scheduleNotification() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        // Check current status before requesting — avoids triggering the system dialog on repeat starts
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            if settings.authorizationStatus == .notDetermined {
+                UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+            }
+        }
         let content = UNMutableNotificationContent()
         content.title = "WAKE UP!"
         content.body = "Something smells amazing!"

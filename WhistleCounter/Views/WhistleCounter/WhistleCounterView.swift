@@ -8,6 +8,7 @@ struct WhistleCounterView: View {
     @Bindable var settings: AppSettings
     @StateObject private var vm: WhistleCounterVM
     @State private var didLogCompletion = false
+    @State private var didSaveCookbook = false
     @ObservedObject private var audioPlayer = AudioPlayer.shared
     var onClose: () -> Void
     var onStartLinkedTimer: (Cookbook) -> Void
@@ -221,6 +222,8 @@ struct WhistleCounterView: View {
     }
 
     private func saveSetup() {
+        guard !didSaveCookbook else { return }
+        didSaveCookbook = true
         HapticManager.success(enabled: settings.hapticsEnabled)
         modelContext.insert(Cookbook(name: "Quick \(vm.target)", whistleTarget: vm.target, emoji: "🎙", createdAt: Date()))
     }

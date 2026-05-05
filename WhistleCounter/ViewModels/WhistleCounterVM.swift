@@ -51,7 +51,10 @@ final class WhistleCounterVM: ObservableObject {
         detector.start(sensitivity: sensitivity)
         LiveActivityManager.shared.startWhistle(title: sourceCookbook?.name ?? "Whistle Counter", count: count, target: target)
         mascotState = .bouncing
-        milestone = "Setting up the microphone..."
+        // Only show "Setting up" if mic isn't already authorized and active
+        if !detector.isListening {
+            milestone = "Setting up the microphone..."
+        }
     }
 
     func stopListening() {

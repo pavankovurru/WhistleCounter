@@ -6,6 +6,7 @@ struct HomeView: View {
     @Query(sort: \Cookbook.createdAt, order: .reverse) private var cookbooks: [Cookbook]
 
     @Bindable var settings: AppSettings
+    var isVisible: Bool
     var onStartWhistles: () -> Void
     var onStartTimer: () -> Void
     var onOpenCookbook: (Cookbook) -> Void
@@ -63,11 +64,14 @@ struct HomeView: View {
                 .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
             }
         }
-        .task {
+        .task(id: isVisible) {
+            guard isVisible else { return }
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(Double.random(in: 6...10)))
+                guard !Task.isCancelled else { break }
                 withAnimation(.easeInOut(duration: 0.9)) { mascotState = .waving }
                 try? await Task.sleep(for: .seconds(2.8))
+                guard !Task.isCancelled else { break }
                 withAnimation(.easeInOut(duration: 0.9)) { mascotState = .idle }
             }
         }
