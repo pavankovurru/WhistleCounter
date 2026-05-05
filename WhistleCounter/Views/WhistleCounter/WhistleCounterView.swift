@@ -8,6 +8,7 @@ struct WhistleCounterView: View {
     @Bindable var settings: AppSettings
     @StateObject private var vm: WhistleCounterVM
     @State private var didLogCompletion = false
+    @ObservedObject private var audioPlayer = AudioPlayer.shared
     var onClose: () -> Void
     var onStartLinkedTimer: (Cookbook) -> Void
 
@@ -40,7 +41,7 @@ struct WhistleCounterView: View {
                     SlotPickerView(title: "Target", value: targetBinding, range: 1...20, suffix: "whistles", tint: WhistleTheme.orange, haptics: settings.hapticsEnabled)
 
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        Text(String(format: "%02d", vm.count))
+                        Text("\(vm.count)")
                             .font(.fredoka(128, weight: .black))
                             .foregroundStyle(WhistleTheme.text(dark: dark))
                             .contentTransition(.numericText())
@@ -58,42 +59,24 @@ struct WhistleCounterView: View {
 
                 WhistlyMascot(state: vm.mascotState, theme: MascotTheme.resolved(from: settings.mascotTheme), size: 174)
                     .frame(height: 170)
-                    .padding(.top, 14)
-                    .padding(.bottom, 14)
+                    .padding(.top, 24)
+                    .padding(.bottom, 18)
 
                 VStack(spacing: 16) {
-                    Button {
-                        HapticManager.tap(enabled: settings.hapticsEnabled)
-                        vm.increment()
-                        AudioPlayer.shared.playWhistle()
-                    } label: {
-                        Label("Manual Whistle", systemImage: "plus.circle.fill")
-                            .font(.fredoka(15, weight: .bold))
-                            .foregroundStyle(WhistleTheme.orange)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 9)
-                            .background {
-                                ZStack {
-                                    Capsule()
-                                        .fill(WhistleTheme.shadow(dark: dark))
-                                        .offset(y: 2.5)
-                                    Capsule()
-                                        .fill(.white)
-                                }
-                            }
-                    }
-                    .buttonStyle(.plain)
-
                     ChunkyButton(
                         title: listeningButtonTitle,
-                        systemImage: vm.detector.isListening ? "stop.fill" : (vm.detector.isStarting ? "waveform" : "mic.fill"),
-                        color: vm.detector.isListening || vm.detector.isStarting ? WhistleTheme.orange : WhistleTheme.charcoal,
+                        systemImage: listeningButtonIcon,
+                        color: audioPlayer.isAlarmPlaying || vm.detector.isListening || vm.detector.isStarting ? WhistleTheme.orange : WhistleTheme.charcoal,
                         fontSize: 17,
                         fullWidth: true,
-                        activeGlow: vm.detector.isListening
+                        activeGlow: vm.detector.isListening && !audioPlayer.isAlarmPlaying
                     ) {
                         HapticManager.tap(enabled: settings.hapticsEnabled)
-                        vm.toggleListening(sensitivity: sensitivity)
+                        if audioPlayer.isAlarmPlaying {
+                            AudioPlayer.shared.stopAlarm()
+                        } else {
+                            vm.toggleListening(sensitivity: sensitivity)
+                        }
                     }
                     .padding(.horizontal, 38)
 
@@ -180,7 +163,10 @@ struct WhistleCounterView: View {
             .buttonStyle(.plain)
         }
         .padding(.horizontal, 22)
-        .padding(.top, 10)
+        .padding(.top, 0)
+        .padding(.bottom, 10)
+        .offset(y: -38)
+        .zIndex(2)
     }
 
     @ViewBuilder
@@ -222,6 +208,9 @@ struct WhistleCounterView: View {
     }
 
     private var listeningButtonTitle: String {
+        if audioPlayer.isAlarmPlaying {
+            return "Stop Sound"
+        }
         if vm.detector.isListening {
             return "Stop Listening"
         }
@@ -229,6 +218,19 @@ struct WhistleCounterView: View {
             return "Listening..."
         }
         return "Start Listening"
+    }
+
+    private var listeningButtonIcon: String {
+        if audioPlayer.isAlarmPlaying {
+            return "speaker.slash.fill"
+        }
+        if vm.detector.isListening {
+            return "stop.fill"
+        }
+        if vm.detector.isStarting {
+            return "waveform"
+        }
+        return "mic.fill"
     }
 
     private func saveSetup() {

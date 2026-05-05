@@ -7,6 +7,8 @@ import Foundation
 final class AudioPlayer: ObservableObject {
     static let shared = AudioPlayer()
 
+    @Published private(set) var isAlarmPlaying = false
+
     private var backgroundPlayer: AVAudioPlayer?
     private var backgroundEngine: AVAudioEngine?
     private var backgroundNode: AVAudioPlayerNode?
@@ -67,6 +69,11 @@ final class AudioPlayer: ObservableObject {
             alarmPlayer?.numberOfLoops = 2
             alarmPlayer?.volume = 1
             alarmPlayer?.play()
+            isAlarmPlaying = true
+            alarmStopTask = Task { @MainActor in
+                try? await Task.sleep(for: .seconds(14))
+                stopAlarm()
+            }
         } else {
             startProceduralAlarm(pack: pack)
         }
@@ -83,6 +90,7 @@ final class AudioPlayer: ObservableObject {
         alarmNode = nil
         alarmEngine = nil
         alarmBuffer = nil
+        isAlarmPlaying = false
     }
 
     private func playResource(name: String, fallback: SystemSoundID) {
@@ -208,6 +216,7 @@ final class AudioPlayer: ObservableObject {
         player.prepareToPlay()
         alarmPlayer = player
         player.play()
+        isAlarmPlaying = true
         alarmStopTask = Task { @MainActor in
             try? await Task.sleep(for: .seconds(14))
             stopAlarm()

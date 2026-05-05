@@ -9,6 +9,13 @@ enum HapticManager {
         #endif
     }
 
+    static func selection(enabled: Bool) {
+        guard enabled else { return }
+        #if os(iOS)
+        UISelectionFeedbackGenerator().selectionChanged()
+        #endif
+    }
+
     static func success(enabled: Bool) {
         guard enabled else { return }
         #if os(iOS)

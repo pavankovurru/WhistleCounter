@@ -78,6 +78,242 @@ struct ChunkyButton: View {
     }
 }
 
+struct DeleteConfirmationOverlay: View {
+    var title: String
+    var message: String
+    var confirmTitle: String
+    var dark: Bool
+    var haptics: Bool
+    var onCancel: () -> Void
+    var onConfirm: () -> Void
+
+    @State private var visible = false
+
+    var body: some View {
+        ZStack {
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .ignoresSafeArea()
+                .overlay {
+                    Color.black.opacity(dark ? 0.50 : 0.24)
+                        .ignoresSafeArea()
+                }
+                .onTapGesture(perform: cancel)
+
+            VStack(spacing: 16) {
+                ZStack {
+                    Circle()
+                        .fill(WhistleTheme.orange.darkened(0.38).opacity(0.55))
+                        .frame(width: 72, height: 72)
+                        .offset(y: 4)
+                    Circle()
+                        .fill(WhistleTheme.orange)
+                        .frame(width: 72, height: 72)
+                    Image(systemName: "trash.fill")
+                        .font(.system(size: 27, weight: .black))
+                        .foregroundStyle(.white)
+                }
+
+                VStack(spacing: 7) {
+                    Text(title)
+                        .font(.fredoka(25, weight: .black))
+                        .foregroundStyle(WhistleTheme.text(dark: dark))
+                        .multilineTextAlignment(.center)
+                    Text(message)
+                        .font(.nunito(14, weight: .black))
+                        .foregroundStyle(WhistleTheme.secondaryText(dark: dark))
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                HStack(spacing: 10) {
+                    Button(action: cancel) {
+                        Text("Keep")
+                            .font(.fredoka(16, weight: .black))
+                            .foregroundStyle(WhistleTheme.charcoal)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 13)
+                            .background(WhistleTheme.mint, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+
+                    Button(action: confirm) {
+                        Text(confirmTitle)
+                            .font(.fredoka(16, weight: .black))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 13)
+                            .background(WhistleTheme.orange, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(20)
+            .background {
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .fill(WhistleTheme.card(dark: dark))
+                    .shadow(color: WhistleTheme.raisedShadow(dark: dark), radius: 18, y: 8)
+            }
+            .padding(.horizontal, 28)
+            .scaleEffect(visible ? 1 : 0.88)
+            .opacity(visible ? 1 : 0)
+        }
+        .onAppear {
+            HapticManager.warning(enabled: haptics)
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.72)) {
+                visible = true
+            }
+        }
+    }
+
+    private func cancel() {
+        HapticManager.tap(enabled: haptics)
+        withAnimation(.spring(response: 0.24, dampingFraction: 0.86)) {
+            visible = false
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.16) {
+            onCancel()
+        }
+    }
+
+    private func confirm() {
+        HapticManager.warning(enabled: haptics)
+        withAnimation(.spring(response: 0.24, dampingFraction: 0.86)) {
+            visible = false
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+            onConfirm()
+        }
+    }
+}
+
+struct AppActionSheetAction: Identifiable {
+    let id = UUID()
+    var title: String
+    var systemImage: String
+    var color: Color
+    var isDestructive = false
+    var action: () -> Void
+}
+
+struct AppActionSheetOverlay: View {
+    var title: String
+    var subtitle: String
+    var emoji: String
+    var actions: [AppActionSheetAction]
+    var dark: Bool
+    var haptics: Bool
+    var onDismiss: () -> Void
+
+    @State private var visible = false
+
+    var body: some View {
+        ZStack {
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .ignoresSafeArea()
+                .overlay {
+                    Color.black.opacity(dark ? 0.44 : 0.22)
+                        .ignoresSafeArea()
+                }
+                .onTapGesture(perform: dismiss)
+
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: 12) {
+                    Text(emoji)
+                        .font(.system(size: 32))
+                        .frame(width: 58, height: 58)
+                        .background(WhistleTheme.sunny, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(title)
+                            .font(.fredoka(23, weight: .black))
+                            .foregroundStyle(WhistleTheme.text(dark: dark))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.78)
+                        Text(subtitle)
+                            .font(.nunito(13, weight: .black))
+                            .foregroundStyle(WhistleTheme.secondaryText(dark: dark))
+                            .lineLimit(2)
+                    }
+                }
+
+                VStack(spacing: 8) {
+                    ForEach(actions) { item in
+                        actionRow(item)
+                    }
+                }
+            }
+            .padding(18)
+            .background {
+                RoundedRectangle(cornerRadius: 30, style: .continuous)
+                    .fill(WhistleTheme.card(dark: dark))
+                    .shadow(color: WhistleTheme.raisedShadow(dark: dark), radius: 18, y: 8)
+            }
+            .padding(.horizontal, 24)
+            .scaleEffect(visible ? 1 : 0.88)
+            .opacity(visible ? 1 : 0)
+        }
+        .onAppear {
+            HapticManager.tap(enabled: haptics)
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.76)) {
+                visible = true
+            }
+        }
+    }
+
+    private func actionRow(_ item: AppActionSheetAction) -> some View {
+        Button {
+            perform(item.action, warning: item.isDestructive)
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: item.systemImage)
+                    .font(.system(size: 16, weight: .black))
+                    .foregroundStyle(item.color == WhistleTheme.sunny || item.color == WhistleTheme.mint ? WhistleTheme.charcoal : .white)
+                    .frame(width: 42, height: 42)
+                    .background(item.color, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+                Text(item.title)
+                    .font(.fredoka(17, weight: .black))
+                    .foregroundStyle(item.isDestructive ? WhistleTheme.orange : WhistleTheme.text(dark: dark))
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .black))
+                    .foregroundStyle(WhistleTheme.secondaryText(dark: dark))
+            }
+            .padding(10)
+            .background(WhistleTheme.background(dark: dark), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func dismiss() {
+        HapticManager.tap(enabled: haptics)
+        close()
+    }
+
+    private func perform(_ action: @escaping () -> Void, warning: Bool) {
+        if warning {
+            HapticManager.warning(enabled: haptics)
+        } else {
+            HapticManager.tap(enabled: haptics)
+        }
+        close(after: action)
+    }
+
+    private func close(after action: (() -> Void)? = nil) {
+        withAnimation(.spring(response: 0.24, dampingFraction: 0.86)) {
+            visible = false
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
+            onDismiss()
+            action?()
+        }
+    }
+}
+
 struct ChipButton: View {
     var title: String
     var active: Bool

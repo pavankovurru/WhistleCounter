@@ -9,6 +9,9 @@ struct HistoryView: View {
     @Bindable var settings: AppSettings
     var onRerun: (CookingSession) -> Void
     @State private var editingSession: CookingSession?
+    @State private var pendingDeleteSession: CookingSession?
+    @State private var actionSession: CookingSession?
+    @State private var confirmingClearAll = false
 
     private var dark: Bool { settings.darkModeEnabled || colorScheme == .dark }
 
@@ -17,43 +20,90 @@ struct HistoryView: View {
             WhistleTheme.background(dark: dark)
                 .ignoresSafeArea()
 
-            ScrollView(showsIndicators: false) {
+            GeometryReader { proxy in
                 VStack(alignment: .leading, spacing: 14) {
                     header
-
-                    if let first = sessions.first {
-                        ShareableSessionCard(session: first)
-                    }
 
                     if sessions.isEmpty {
                         emptyState
                             .frame(maxWidth: .infinity)
-                            .padding(.top, 56)
+                            .frame(height: max(280, proxy.size.height - 176), alignment: .center)
                     } else {
-                        VStack(spacing: 10) {
-                            ForEach(Array(sessions.enumerated()), id: \.element.id) { index, session in
-                                HistoryRow(session: session, colorIndex: index, dark: dark) {
-                                    onRerun(session)
-                                } onEdit: {
-                                    editingSession = session
-                                } onDelete: {
-                                    delete(session)
-                                } onSave: {
-                                    modelContext.insert(Cookbook(
-                                        name: session.title,
-                                        whistleTarget: session.targetWhistles ?? (session.whistleCount > 0 ? session.whistleCount : nil),
-                                        timerDuration: session.timerDuration,
-                                        notes: "Saved from history.",
-                                        emoji: session.emoji
-                                    ))
+                        ScrollView(showsIndicators: false) {
+                            VStack(spacing: 14) {
+                                if let first = sessions.first {
+                                    ShareableSessionCard(session: first)
                                 }
+
+                                VStack(spacing: 10) {
+                                    ForEach(Array(sessions.enumerated()), id: \.element.id) { index, session in
+                                        HistoryRow(session: session, colorIndex: index, dark: dark) {
+                                            onRerun(session)
+                                        } onEdit: {
+                                            editingSession = session
+                                        } onDelete: {
+                                            pendingDeleteSession = session
+                                        } onSave: {
+                                            saveAsCookbook(session)
+                                        } onLongPress: {
+                                            actionSession = session
+                                        }
+                                        .transition(.asymmetric(
+                                            insertion: .scale(scale: 0.96).combined(with: .opacity),
+                                            removal: .move(edge: .trailing).combined(with: .scale(scale: 0.88)).combined(with: .opacity)
+                                        ))
+                                    }
+                                }
+                                .animation(.spring(response: 0.38, dampingFraction: 0.82), value: sessions.map(\.id))
                             }
+                            .padding(.bottom, 106)
                         }
                     }
                 }
                 .padding(.horizontal, 22)
                 .padding(.top, 10)
-                .padding(.bottom, 106)
+            }
+
+            if confirmingClearAll {
+                DeleteConfirmationOverlay(
+                    title: "Clear all history?",
+                    message: "This removes every cooking adventure from History. Your saved cookbooks stay safe.",
+                    confirmTitle: "Clear All",
+                    dark: dark,
+                    haptics: settings.hapticsEnabled,
+                    onCancel: { confirmingClearAll = false },
+                    onConfirm: clearAll
+                )
+                .transition(.opacity)
+                .zIndex(4)
+            }
+
+            if let actionSession {
+                AppActionSheetOverlay(
+                    title: actionSession.title,
+                    subtitle: actionSession.summary,
+                    emoji: actionSession.emoji,
+                    actions: historyActions(for: actionSession),
+                    dark: dark,
+                    haptics: settings.hapticsEnabled,
+                    onDismiss: { self.actionSession = nil }
+                )
+                .transition(.opacity)
+                .zIndex(5)
+            }
+
+            if let pendingDeleteSession {
+                DeleteConfirmationOverlay(
+                    title: "Delete this item?",
+                    message: "\(pendingDeleteSession.title) will be removed from History.",
+                    confirmTitle: "Delete",
+                    dark: dark,
+                    haptics: settings.hapticsEnabled,
+                    onCancel: { self.pendingDeleteSession = nil },
+                    onConfirm: { delete(pendingDeleteSession) }
+                )
+                .transition(.opacity)
+                .zIndex(6)
             }
         }
         .sheet(item: $editingSession) { session in
@@ -63,14 +113,32 @@ struct HistoryView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text("Past adventures")
-                .font(.nunito(13, weight: .black))
-                .foregroundStyle(WhistleTheme.secondaryText(dark: dark))
-                .textCase(.uppercase)
-            Text("History")
-                .font(.fredoka(32, weight: .black))
-                .foregroundStyle(WhistleTheme.text(dark: dark))
+        HStack(alignment: .bottom) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Past adventures")
+                    .font(.nunito(13, weight: .black))
+                    .foregroundStyle(WhistleTheme.secondaryText(dark: dark))
+                    .textCase(.uppercase)
+                Text("History")
+                    .font(.fredoka(32, weight: .black))
+                    .foregroundStyle(WhistleTheme.text(dark: dark))
+            }
+
+            Spacer()
+
+            if !sessions.isEmpty {
+                ChunkyButton(
+                    title: "Clear All",
+                    systemImage: "trash.fill",
+                    color: WhistleTheme.orange,
+                    fontSize: 13,
+                    horizontalPadding: 12,
+                    verticalPadding: 9,
+                    cornerRadius: 18
+                ) {
+                    confirmingClearAll = true
+                }
+            }
         }
     }
 
@@ -87,9 +155,45 @@ struct HistoryView: View {
     }
 
     private func delete(_ session: CookingSession) {
+        pendingDeleteSession = nil
         withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
             modelContext.delete(session)
         }
+    }
+
+    private func clearAll() {
+        confirmingClearAll = false
+        let sessionsToDelete = sessions
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+            sessionsToDelete.forEach(modelContext.delete)
+        }
+    }
+
+    private func saveAsCookbook(_ session: CookingSession) {
+        modelContext.insert(Cookbook(
+            name: session.title,
+            whistleTarget: session.targetWhistles ?? (session.whistleCount > 0 ? session.whistleCount : nil),
+            timerDuration: session.timerDuration,
+            notes: "Saved from history.",
+            emoji: session.emoji
+        ))
+    }
+
+    private func historyActions(for session: CookingSession) -> [AppActionSheetAction] {
+        [
+            AppActionSheetAction(title: "Cook Again", systemImage: "arrow.clockwise", color: WhistleTheme.mint) {
+                onRerun(session)
+            },
+            AppActionSheetAction(title: "Edit Name", systemImage: "pencil", color: WhistleTheme.sunny) {
+                editingSession = session
+            },
+            AppActionSheetAction(title: "Save to Cookbook", systemImage: "square.and.arrow.down.fill", color: WhistleTheme.blue) {
+                saveAsCookbook(session)
+            },
+            AppActionSheetAction(title: "Delete", systemImage: "trash.fill", color: WhistleTheme.orange, isDestructive: true) {
+                pendingDeleteSession = session
+            }
+        ]
     }
 }
 
@@ -101,6 +205,7 @@ struct HistoryRow: View {
     var onEdit: () -> Void
     var onDelete: () -> Void
     var onSave: () -> Void
+    var onLongPress: () -> Void
     @State private var horizontalOffset: CGFloat = 0
 
     var body: some View {
@@ -119,15 +224,11 @@ struct HistoryRow: View {
                         onRerun()
                     }
                 }
-                .contextMenu {
-                    Button("Cook Again", systemImage: "arrow.clockwise", action: onRerun)
-                    Button("Edit Name", systemImage: "pencil", action: onEdit)
-                    Button("Save as Cookbook", systemImage: "square.and.arrow.down", action: onSave)
-                    ShareLink(item: shareText) {
-                        Label("Share", systemImage: "square.and.arrow.up")
+                .simultaneousGesture(LongPressGesture(minimumDuration: 0.45).onEnded { _ in
+                    if horizontalOffset == 0 {
+                        onLongPress()
                     }
-                    Button("Delete", systemImage: "trash", role: .destructive, action: onDelete)
-                }
+                })
         }
     }
 

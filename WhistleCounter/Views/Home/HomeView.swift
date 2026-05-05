@@ -111,15 +111,23 @@ struct HomeView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title)
                         .font(.fredoka(24, weight: .black))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.68)
                     Text(subtitle)
                         .font(.nunito(13, weight: .black))
                         .opacity(0.82)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.78)
                 }
+                .layoutPriority(1)
+
                 Spacer()
+
                 Image(systemName: "chevron.right")
                     .font(.system(size: 22, weight: .black))
             }
             .foregroundStyle(.white)
+            .frame(maxWidth: .infinity, minHeight: 82, alignment: .leading)
             .padding(22)
             .background {
                 ZStack {

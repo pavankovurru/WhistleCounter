@@ -14,6 +14,7 @@ struct WhistlyMascot: View {
     var state: WhistlyState = .idle
     var theme: MascotTheme = .default
     var size: CGFloat = 180
+    var showsSteamPuffs = true
 
     @State private var motion = false
 
@@ -121,7 +122,7 @@ struct WhistlyMascot: View {
 
     @ViewBuilder
     private func hatOrSteam(_ u: CGFloat) -> some View {
-        SteamWhistleExact(u: u, colors: colors, state: state)
+        SteamWhistleExact(u: u, colors: colors, state: state, showsSteamPuffs: showsSteamPuffs)
     }
 
     @ViewBuilder
@@ -369,6 +370,7 @@ private struct SteamWhistleExact: View {
     var u: CGFloat
     var colors: WhistlyColors
     var state: WhistlyState
+    var showsSteamPuffs: Bool
     @State private var puff = false
 
     var body: some View {
@@ -402,14 +404,16 @@ private struct SteamWhistleExact: View {
                 .frame(width: 10 * u, height: 8 * u)
                 .position(x: 100 * u, y: 44 * u)
 
-            ForEach(0..<3, id: \.self) { index in
-                SteamPuff(
-                    u: u,
-                    x: puffX(index) * u,
-                    baseY: 28 * u,
-                    phase: puff
-                )
-                .animation(.easeOut(duration: 1.6).repeatForever(autoreverses: false).delay(Double(index) * 0.22), value: puff)
+            if showsSteamPuffs {
+                ForEach(0..<3, id: \.self) { index in
+                    SteamPuff(
+                        u: u,
+                        x: puffX(index) * u,
+                        baseY: 28 * u,
+                        phase: puff
+                    )
+                    .animation(.easeOut(duration: 1.6).repeatForever(autoreverses: false).delay(Double(index) * 0.22), value: puff)
+                }
             }
         }
         .frame(width: 200 * u, height: 200 * u, alignment: .topLeading)

@@ -12,6 +12,8 @@ struct CookbooksView: View {
     @State private var filter: CookbookMode = .all
     @State private var editorCookbook: Cookbook?
     @State private var showEditor = false
+    @State private var pendingDeleteCookbook: Cookbook?
+    @State private var actionCookbook: Cookbook?
 
     private var dark: Bool { settings.darkModeEnabled || colorScheme == .dark }
 
@@ -53,15 +55,51 @@ struct CookbooksView: View {
                                         showEditor = true
                                     },
                                     onDelete: {
-                                        modelContext.delete(cookbook)
+                                        pendingDeleteCookbook = cookbook
+                                    },
+                                    onLongPress: {
+                                        actionCookbook = cookbook
                                     }
                                 )
+                                .transition(.asymmetric(
+                                    insertion: .scale(scale: 0.96).combined(with: .opacity),
+                                    removal: .scale(scale: 0.82).combined(with: .opacity)
+                                ))
                             }
                         }
+                        .animation(.spring(response: 0.38, dampingFraction: 0.82), value: filteredCookbooks.map(\.id))
                         .padding(.horizontal, 22)
                         .padding(.bottom, 106)
                     }
                 }
+            }
+
+            if let actionCookbook {
+                AppActionSheetOverlay(
+                    title: actionCookbook.name,
+                    subtitle: actionCookbook.detailText,
+                    emoji: actionCookbook.emoji,
+                    actions: cookbookActions(for: actionCookbook),
+                    dark: dark,
+                    haptics: settings.hapticsEnabled,
+                    onDismiss: { self.actionCookbook = nil }
+                )
+                .transition(.opacity)
+                .zIndex(3)
+            }
+
+            if let pendingDeleteCookbook {
+                DeleteConfirmationOverlay(
+                    title: "Delete cookbook?",
+                    message: "\(pendingDeleteCookbook.name) will be removed from your saved cookbooks.",
+                    confirmTitle: "Delete",
+                    dark: dark,
+                    haptics: settings.hapticsEnabled,
+                    onCancel: { self.pendingDeleteCookbook = nil },
+                    onConfirm: { delete(pendingDeleteCookbook) }
+                )
+                .transition(.opacity)
+                .zIndex(4)
             }
         }
         .sheet(isPresented: $showEditor) {
@@ -110,6 +148,32 @@ struct CookbooksView: View {
         }
         .padding(.horizontal, 22)
         .padding(.top, 10)
+    }
+
+    private func delete(_ cookbook: Cookbook) {
+        pendingDeleteCookbook = nil
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+            modelContext.delete(cookbook)
+        }
+    }
+
+    private func edit(_ cookbook: Cookbook) {
+        editorCookbook = cookbook
+        showEditor = true
+    }
+
+    private func cookbookActions(for cookbook: Cookbook) -> [AppActionSheetAction] {
+        [
+            AppActionSheetAction(title: "Cook This", systemImage: "flame.fill", color: WhistleTheme.mint) {
+                onCook(cookbook)
+            },
+            AppActionSheetAction(title: "Edit", systemImage: "pencil", color: WhistleTheme.sunny) {
+                edit(cookbook)
+            },
+            AppActionSheetAction(title: "Delete", systemImage: "trash.fill", color: WhistleTheme.orange, isDestructive: true) {
+                pendingDeleteCookbook = cookbook
+            }
+        ]
     }
 
     private var filteredCookbooks: [Cookbook] {
@@ -162,6 +226,7 @@ struct CookbookCard: View {
     var onCook: () -> Void
     var onEdit: () -> Void
     var onDelete: () -> Void
+    var onLongPress: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -226,10 +291,8 @@ struct CookbookCard: View {
                 .fill(WhistleTheme.card(dark: dark))
                 .shadow(color: WhistleTheme.shadow(dark: dark), radius: 9, y: 4)
         }
-        .contextMenu {
-            Button("Cook This", systemImage: "flame.fill", action: onCook)
-            Button("Edit", systemImage: "pencil", action: onEdit)
-            Button("Delete", systemImage: "trash", role: .destructive, action: onDelete)
+        .onLongPressGesture(minimumDuration: 0.45) {
+            onLongPress()
         }
     }
 
@@ -341,18 +404,28 @@ struct CookbookEditorSheet: View {
     }
 
     private var dishCard: some View {
-        editorCard(title: "Dish", icon: "fork.knife", tint: WhistleTheme.orange) {
-            TextField("Toor dal, soft eggs...", text: $name)
-                .font(.fredoka(20, weight: .bold))
-                .foregroundStyle(WhistleTheme.text(dark: dark))
-                .padding(.horizontal, 14)
-                .padding(.vertical, 13)
-                .background(WhistleTheme.background(dark: dark), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        editorCard(title: "Dish", icon: "fork.knife", tint: WhistleTheme.mint) {
+            HStack(spacing: 10) {
+                Text(emoji)
+                    .font(.system(size: 25))
+                    .frame(width: 52, height: 52)
+                    .background(WhistleTheme.charcoal, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+                    .shadow(color: WhistleTheme.shadow(dark: dark), radius: 4, y: 2)
+
+                TextField("Toor dal, soft eggs...", text: $name)
+                    .font(.fredoka(20, weight: .bold))
+                    .foregroundStyle(WhistleTheme.text(dark: dark))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 13)
+                    .background(WhistleTheme.background(dark: dark), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            }
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 9) {
-                    ForEach(emojis, id: \.self) { option in
-                        emojiButton(option)
+                    ForEach(Array(emojis.enumerated()), id: \.offset) { index, option in
+                        emojiButton(option, index: index)
                     }
                 }
                 .padding(.vertical, 2)
@@ -383,7 +456,7 @@ struct CookbookEditorSheet: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
-                .background(WhistleTheme.sunny, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .background(valuePanelColor, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
 
                 valueButton(systemImage: "plus") {
                     adjustSetupValue(by: 1)
@@ -420,17 +493,17 @@ struct CookbookEditorSheet: View {
         .padding(.top, 2)
     }
 
-    private func editorCard<Content: View>(title: String, icon: String, tint: Color, @ViewBuilder content: () -> Content) -> some View {
+    private func editorCard<Content: View>(title: String, icon: String, tint: Color, fill: Color? = nil, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 13) {
             HStack(spacing: 9) {
                 Image(systemName: icon)
                     .font(.system(size: 14, weight: .black))
-                    .foregroundStyle(WhistleTheme.charcoal)
+                    .foregroundStyle(iconForegroundColor(for: tint))
                     .frame(width: 34, height: 34)
-                    .background(tint == WhistleTheme.mint ? tint : WhistleTheme.sunny, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .background(tint, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 Text(title)
                     .font(.fredoka(19, weight: .black))
-                    .foregroundStyle(WhistleTheme.text(dark: dark))
+                    .foregroundStyle(fill == nil ? WhistleTheme.text(dark: dark) : WhistleTheme.charcoal)
             }
 
             content()
@@ -438,12 +511,12 @@ struct CookbookEditorSheet: View {
         .padding(16)
         .background {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(WhistleTheme.card(dark: dark))
+                .fill(fill ?? WhistleTheme.card(dark: dark))
                 .shadow(color: WhistleTheme.shadow(dark: dark), radius: 7, y: 3)
         }
     }
 
-    private func emojiButton(_ option: String) -> some View {
+    private func emojiButton(_ option: String, index: Int) -> some View {
         Button {
             HapticManager.tap(enabled: settings.hapticsEnabled)
             emoji = option
@@ -452,13 +525,17 @@ struct CookbookEditorSheet: View {
                 .font(.title2)
                 .frame(width: 46, height: 46)
                 .background {
-                    let fill = emoji == option ? WhistleTheme.sunny : WhistleTheme.background(dark: dark)
+                    let fill = emoji == option ? editorPaletteColor(for: index) : WhistleTheme.charcoal
                     ZStack {
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(emoji == option ? fill.darkened(0.38).opacity(0.62) : WhistleTheme.shadow(dark: dark))
+                            .fill(emoji == option ? fill.darkened(0.38).opacity(0.62) : .black.opacity(0.58))
                             .offset(y: emoji == option ? 2.5 : 1.2)
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
                             .fill(fill)
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .stroke(.white.opacity(emoji == option ? 0.24 : 0.10), lineWidth: 1)
+                            }
                     }
                 }
         }
@@ -475,11 +552,11 @@ struct CookbookEditorSheet: View {
                 Text(mode.title)
             }
             .font(.fredoka(15, weight: .black))
-            .foregroundStyle(setupMode == mode ? WhistleTheme.charcoal : WhistleTheme.secondaryText(dark: dark))
+            .foregroundStyle(setupMode == mode ? setupModeForeground(for: mode) : WhistleTheme.secondaryText(dark: dark))
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)
             .background {
-                let fill = setupMode == mode ? WhistleTheme.sunny : WhistleTheme.background(dark: dark)
+                let fill = setupMode == mode ? setupModeColor(for: mode) : WhistleTheme.background(dark: dark)
                 ZStack {
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
                         .fill(setupMode == mode ? fill.darkened(0.38).opacity(0.62) : WhistleTheme.shadow(dark: dark))
@@ -517,6 +594,27 @@ struct CookbookEditorSheet: View {
 
     private var accentColor: Color {
         setupMode == .whistles ? WhistleTheme.orange : WhistleTheme.mint
+    }
+
+    private var valuePanelColor: Color {
+        setupMode == .whistles ? WhistleTheme.cream : WhistleTheme.mint.lightened(0.12)
+    }
+
+    private func setupModeColor(for mode: CookbookSetupMode) -> Color {
+        mode == .whistles ? WhistleTheme.orange : WhistleTheme.mint
+    }
+
+    private func setupModeForeground(for mode: CookbookSetupMode) -> Color {
+        mode == .whistles ? .white : WhistleTheme.charcoal
+    }
+
+    private func editorPaletteColor(for index: Int) -> Color {
+        let colors = [WhistleTheme.orange, WhistleTheme.mint, WhistleTheme.cream, WhistleTheme.charcoal, WhistleTheme.sunny]
+        return colors[index % colors.count]
+    }
+
+    private func iconForegroundColor(for tint: Color) -> Color {
+        tint == WhistleTheme.orange || tint == WhistleTheme.charcoal ? .white : WhistleTheme.charcoal
     }
 
     private func adjustSetupValue(by delta: Int) {
