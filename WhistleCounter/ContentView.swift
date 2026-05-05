@@ -1,80 +1,121 @@
-//
-//  ContentView.swift
-//  WhistleCounter
-//
-//  Created by Pavan Kovurru on 5/4/26.
-//
-
-import SwiftUI
 import SwiftData
+import SwiftUI
 
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query private var items: [Item]
+    @Environment(\.colorScheme) private var colorScheme
+    @Query(sort: \Cookbook.createdAt, order: .reverse) private var cookbooks: [Cookbook]
+    @Query(sort: \AppSettings.id) private var settingsRows: [AppSettings]
+
+    @StateObject private var cookbookVM = CookbookVM()
+    @State private var activeTab: AppTab = .home
+    @State private var activeFlow: ActiveFlow?
 
     var body: some View {
-        NavigationViewWrapper {
-            List {
-                ForEach(items) { item in
-                    NavigationLink {
-                        Text("Item at \(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))")
-                    } label: {
-                        Text(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))
+        Group {
+            if let settings = settingsRows.first {
+                ZStack(alignment: .bottom) {
+                    if settings.hasCompletedOnboarding {
+                        mainTabs(settings: settings)
+                    } else {
+                        OnboardingView(settings: settings)
                     }
                 }
-                .onDelete(perform: deleteItems)
+                .preferredColorScheme(settings.darkModeEnabled ? .dark : nil)
+            } else {
+                ProgressView()
+                    .task { ensureSettings() }
             }
-#if os(macOS)
-            .navigationSplitViewColumnWidth(min: 180, ideal: 200)
-#endif
-            .toolbar {
-#if os(iOS)
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    EditButton()
+        }
+        .task {
+            ensureSettings()
+            cookbookVM.seedIfNeeded(cookbooks: cookbooks, context: modelContext)
+        }
+    }
+
+    @ViewBuilder
+    private func mainTabs(settings: AppSettings) -> some View {
+        ZStack(alignment: .bottom) {
+            switch activeTab {
+            case .home:
+                HomeView(
+                    settings: settings,
+                    onStartWhistles: { activeFlow = .whistles(nil) },
+                    onStartTimer: { activeFlow = .timer(nil) }
+                )
+            case .cookbooks:
+                CookbooksView(settings: settings) { cookbook in
+                    open(cookbook)
                 }
-#endif
-                ToolbarItem {
-                    Button(action: addItem) {
-                        Label("Add Item", systemImage: "plus")
+            case .history:
+                HistoryView(settings: settings) { session in
+                    let cookbook = Cookbook(
+                        name: session.title,
+                        whistleTarget: session.targetWhistles ?? (session.whistleCount > 0 ? session.whistleCount : nil),
+                        timerDuration: session.timerDuration,
+                        emoji: session.emoji
+                    )
+                    if cookbook.whistleTarget != nil {
+                        activeFlow = .whistles(cookbook)
+                    } else {
+                        activeFlow = .timer(cookbook)
                     }
+                }
+            case .settings:
+                SettingsView(settings: settings)
+            }
+
+            BottomTabBar(activeTab: $activeTab, dark: settings.darkModeEnabled || colorScheme == .dark, haptics: settings.hapticsEnabled)
+                .opacity(activeFlow == nil ? 1 : 0)
+        }
+        .fullScreenCover(item: $activeFlow) { flow in
+            switch flow {
+            case .whistles(let cookbook):
+                WhistleCounterView(
+                    settings: settings,
+                    cookbook: cookbook,
+                    onClose: { activeFlow = nil },
+                    onStartLinkedTimer: { linkedCookbook in activeFlow = .timer(linkedCookbook) }
+                )
+            case .timer(let cookbook):
+                TimerView(settings: settings, cookbook: cookbook) {
+                    activeFlow = nil
                 }
             }
         }
     }
 
-    private func addItem() {
-        withAnimation {
-            let newItem = Item(timestamp: Date())
-            modelContext.insert(newItem)
+    private func ensureSettings() {
+        if settingsRows.isEmpty {
+            modelContext.insert(AppSettings())
         }
     }
 
-    private func deleteItems(offsets: IndexSet) {
-        withAnimation {
-            for index in offsets {
-                modelContext.delete(items[index])
-            }
+    private func open(_ cookbook: Cookbook) {
+        cookbook.lastUsedAt = Date()
+        if cookbook.whistleTarget != nil {
+            activeFlow = .whistles(cookbook)
+        } else {
+            activeFlow = .timer(cookbook)
         }
     }
 }
 
-fileprivate struct NavigationViewWrapper<Content: View>: View {
-    let content: () -> Content
+enum ActiveFlow: Identifiable {
+    case whistles(Cookbook?)
+    case timer(Cookbook?)
 
-    var body: some View {
-#if os(macOS)
-        NavigationSplitView {
-            content()
-        } detail: {
-            Text("Select an item")
+    var id: String {
+        switch self {
+        case .whistles(let cookbook):
+            "whistles-\(cookbook?.id.uuidString ?? "quick")"
+        case .timer(let cookbook):
+            "timer-\(cookbook?.id.uuidString ?? "quick")"
         }
-#else
-        content()
-#endif
     }
 }
 
 #Preview {
     ContentView()
-        .modelContainer(for: Item.self, inMemory: true)
+        .modelContainer(for: [Cookbook.self, CookingSession.self, AppSettings.self], inMemory: true)
 }
