@@ -136,7 +136,7 @@ struct CookbooksView: View {
             ChunkyButton(
                 title: "New Cookbook",
                 systemImage: "plus",
-                color: WhistleTheme.orange,
+                color: WhistleTheme.sunny,
                 fontSize: 14.3,
                 horizontalPadding: 13.2,
                 verticalPadding: 9.9,
@@ -332,7 +332,7 @@ struct CookbookEditorSheet: View {
     private let emojis = [
         "🍲", "🍛", "🫘", "🥚", "🍗", "🍖", "🥘", "🥣", "🍜", "🍝",
         "🍚", "🍙", "🍘", "🥟", "🥗", "🥬", "🥦", "🥕", "🌽", "🥔",
-        "🍠", "🫛", "🧄", "🧅", "🌶", "🍅", "🥥", "🍋", "🥭", "🍌",
+        "🍠", "🫛", "🧄", "🧅", "🌶", "🍅",
         "🍞", "🥐", "🥯", "🫓", "🥞", "🧇", "🧀", "🍳", "🥓", "🍤",
         "🐟", "🍣", "🍱", "🥪", "🌮", "🌯", "🍕", "🍔", "☕️", "🫖",
         "🎙", "⏱"
@@ -345,36 +345,27 @@ struct CookbookEditorSheet: View {
                 WhistleTheme.background(dark: dark)
                     .ignoresSafeArea()
 
-                ScrollView(showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: 18) {
-                        editorHeader
-                        dishCard
-                        setupCard
-                        notesCard
-                        saveButton
+                GeometryReader { proxy in
+                    let compact = proxy.size.height < 760
+
+                    VStack(alignment: .leading, spacing: 0) {
+                        editorTopRow(compact: compact)
+                        Spacer(minLength: compact ? 8 : 12)
+                        dishCard(compact: compact)
+                        Spacer(minLength: compact ? 8 : 14)
+                        setupCard(compact: compact)
+                        Spacer(minLength: compact ? 8 : 14)
+                        notesCard(compact: compact)
+                        Spacer(minLength: compact ? 8 : 14)
+                        saveButton(compact: compact)
                     }
                     .padding(.horizontal, 22)
-                    .padding(.top, 10)
-                    .padding(.bottom, 28)
+                    .padding(.top, compact ? 4 : 10)
+                    .padding(.bottom, max(proxy.safeAreaInsets.bottom + 12, 20))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 }
             }
-            .navigationBarTitleDisplayMode(.inline)
-            .tint(WhistleTheme.orange)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Text("Close")
-                            .font(.fredoka(14, weight: .black))
-                            .foregroundStyle(WhistleTheme.charcoal)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
-                            .background(WhistleTheme.sunny, in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
+            .toolbar(.hidden, for: .navigationBar)
             .onAppear {
                 guard let cookbook else { return }
                 name = cookbook.name
@@ -388,37 +379,70 @@ struct CookbookEditorSheet: View {
         .background(WhistleTheme.background(dark: dark))
     }
 
-    private var editorHeader: some View {
-        VStack(alignment: .leading, spacing: 4) {
+    private func editorTopRow(compact: Bool) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            editorHeader(compact: compact)
+            Spacer(minLength: 8)
+            closeIconButton
+        }
+    }
+
+    private func editorHeader(compact: Bool) -> some View {
+        VStack(alignment: .leading, spacing: compact ? 2 : 4) {
             Text(cookbook == nil ? "New recipe" : "Edit recipe")
                 .font(.nunito(13, weight: .black))
                 .foregroundStyle(WhistleTheme.secondaryText(dark: dark))
                 .textCase(.uppercase)
             Text(cookbook == nil ? "Add Cookbook" : "Tune Cookbook")
-                .font(.fredoka(32, weight: .black))
+                .font(.fredoka(compact ? 28 : 32, weight: .black))
                 .foregroundStyle(WhistleTheme.text(dark: dark))
             Text("Save one simple setup: either whistles or a timer.")
-                .font(.nunito(14, weight: .black))
+                .font(.nunito(compact ? 12 : 14, weight: .black))
                 .foregroundStyle(WhistleTheme.secondaryText(dark: dark))
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
         }
     }
 
-    private var dishCard: some View {
-        editorCard(title: "Dish", icon: "fork.knife", tint: WhistleTheme.mint) {
+    private var closeIconButton: some View {
+        Button {
+            HapticManager.tap(enabled: settings.hapticsEnabled)
+            dismiss()
+        } label: {
+            Image(systemName: "xmark")
+                .font(.system(size: 18, weight: .black))
+                .foregroundStyle(WhistleTheme.charcoal)
+                .frame(width: 50, height: 50)
+                .background {
+                    ZStack {
+                        Circle()
+                            .fill(WhistleTheme.sunny.darkened(0.42).opacity(0.68))
+                            .offset(y: 3)
+                        Circle()
+                            .fill(WhistleTheme.sunny)
+                    }
+                }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Close")
+    }
+
+    private func dishCard(compact: Bool) -> some View {
+        editorCard(title: "Dish", icon: "fork.knife", tint: WhistleTheme.mint, compact: compact) {
             HStack(spacing: 10) {
                 Text(emoji)
-                    .font(.system(size: 25))
-                    .frame(width: 52, height: 52)
-                    .background(WhistleTheme.charcoal, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+                    .font(.system(size: compact ? 22 : 25))
+                    .frame(width: compact ? 46 : 52, height: compact ? 46 : 52)
+                    .background(WhistleTheme.sunny, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
                     .shadow(color: WhistleTheme.shadow(dark: dark), radius: 4, y: 2)
 
                 TextField("Toor dal, soft eggs...", text: $name)
-                    .font(.fredoka(20, weight: .bold))
+                    .font(.fredoka(compact ? 18 : 20, weight: .bold))
                     .foregroundStyle(WhistleTheme.text(dark: dark))
                     .lineLimit(1)
                     .minimumScaleFactor(0.82)
                     .padding(.horizontal, 14)
-                    .padding(.vertical, 13)
+                    .padding(.vertical, compact ? 11 : 13)
                     .background(WhistleTheme.background(dark: dark), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
             }
 
@@ -433,14 +457,14 @@ struct CookbookEditorSheet: View {
         }
     }
 
-    private var setupCard: some View {
-        editorCard(title: "Setup", icon: setupMode == .whistles ? "mic.fill" : "timer", tint: accentColor) {
+    private func setupCard(compact: Bool) -> some View {
+        editorCard(title: "Setup", icon: setupMode == .whistles ? "mic.fill" : "timer", tint: accentColor, compact: compact) {
             HStack(spacing: 10) {
                 setupModeButton(.whistles)
                 setupModeButton(.timer)
             }
 
-            HStack(spacing: 14) {
+            HStack(spacing: compact ? 10 : 14) {
                 valueButton(systemImage: "minus") {
                     adjustSetupValue(by: -1)
                 }
@@ -465,50 +489,49 @@ struct CookbookEditorSheet: View {
         }
     }
 
-    private var notesCard: some View {
-        editorCard(title: "Notes", icon: "text.alignleft", tint: WhistleTheme.mint) {
-            TextEditor(text: $notes)
+    private func notesCard(compact: Bool) -> some View {
+        editorCard(title: "Notes", icon: "text.alignleft", tint: WhistleTheme.mint, compact: compact) {
+            TextField("Tiny note, spice level, soaking time...", text: $notes, axis: .vertical)
                 .font(.nunito(16, weight: .bold))
                 .foregroundStyle(WhistleTheme.text(dark: dark))
-                .frame(minHeight: 96)
-                .padding(10)
-                .scrollContentBackground(.hidden)
+                .lineLimit(compact ? 2 : 3, reservesSpace: true)
+                .padding(.horizontal, 12)
+                .padding(.vertical, compact ? 9 : 11)
                 .background(WhistleTheme.background(dark: dark), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
     }
 
-    private var saveButton: some View {
+    private func saveButton(compact: Bool) -> some View {
         ChunkyButton(
             title: cookbook == nil ? "Save Cookbook" : "Save Changes",
             systemImage: "checkmark",
             color: WhistleTheme.mint,
-            fontSize: 19,
+            fontSize: compact ? 17 : 19,
             horizontalPadding: 18,
-            verticalPadding: 17,
+            verticalPadding: compact ? 14 : 17,
             cornerRadius: 26,
             fullWidth: true
         ) {
             saveDraft()
         }
-        .padding(.top, 2)
     }
 
-    private func editorCard<Content: View>(title: String, icon: String, tint: Color, fill: Color? = nil, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 13) {
+    private func editorCard<Content: View>(title: String, icon: String, tint: Color, fill: Color? = nil, compact: Bool = false, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: compact ? 9 : 12) {
             HStack(spacing: 9) {
                 Image(systemName: icon)
                     .font(.system(size: 14, weight: .black))
                     .foregroundStyle(iconForegroundColor(for: tint))
-                    .frame(width: 34, height: 34)
+                    .frame(width: compact ? 30 : 34, height: compact ? 30 : 34)
                     .background(tint, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 Text(title)
-                    .font(.fredoka(19, weight: .black))
+                    .font(.fredoka(compact ? 17 : 19, weight: .black))
                     .foregroundStyle(fill == nil ? WhistleTheme.text(dark: dark) : WhistleTheme.charcoal)
             }
 
             content()
         }
-        .padding(16)
+        .padding(compact ? 12 : 15)
         .background {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .fill(fill ?? WhistleTheme.card(dark: dark))
@@ -525,16 +548,17 @@ struct CookbookEditorSheet: View {
                 .font(.title2)
                 .frame(width: 46, height: 46)
                 .background {
-                    let fill = emoji == option ? editorPaletteColor(for: index) : WhistleTheme.charcoal
+                    let active = emoji == option
+                    let fill = active ? WhistleTheme.mint : WhistleTheme.card(dark: dark)
                     ZStack {
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(emoji == option ? fill.darkened(0.38).opacity(0.62) : .black.opacity(0.58))
-                            .offset(y: emoji == option ? 2.5 : 1.2)
+                            .fill(active ? fill.darkened(0.38).opacity(0.62) : WhistleTheme.shadow(dark: dark))
+                            .offset(y: active ? 2.5 : 1.2)
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
                             .fill(fill)
                             .overlay {
                                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .stroke(.white.opacity(emoji == option ? 0.24 : 0.10), lineWidth: 1)
+                                    .stroke(active ? WhistleTheme.charcoal.opacity(0.12) : WhistleTheme.charcoal.opacity(dark ? 0.0 : 0.06), lineWidth: 1)
                             }
                     }
                 }

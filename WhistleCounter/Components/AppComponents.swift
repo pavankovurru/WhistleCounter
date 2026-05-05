@@ -1,5 +1,101 @@
 import SwiftUI
 
+struct PlayfulScreenBackground: View {
+    var dark: Bool
+
+    var body: some View {
+        ZStack {
+            WhistleTheme.background(dark: dark)
+
+            // Yellow ambient glow anchored in top-left corner — center is off-screen,
+            // only the soft aura bleeds in
+            Circle()
+                .fill(WhistleTheme.sunny.opacity(dark ? 0.22 : 0.32))
+                .frame(width: 420, height: 420)
+                .blur(radius: 70)
+                .offset(x: -180, y: -270)
+
+            // Mint ambient glow anchored in bottom-right corner
+            Circle()
+                .fill(WhistleTheme.mint.opacity(dark ? 0.18 : 0.26))
+                .frame(width: 340, height: 340)
+                .blur(radius: 60)
+                .offset(x: 170, y: 300)
+        }
+        .ignoresSafeArea()
+    }
+}
+
+struct FlowNavigationBar: View {
+    var title: String
+    var dark: Bool
+    var haptics: Bool
+    var onBack: () -> Void
+    var onReset: () -> Void
+
+    var body: some View {
+        ZStack {
+            HStack {
+                navButton(systemImage: "chevron.left", action: onBack)
+                Spacer()
+                navButton(systemImage: "arrow.counterclockwise", action: onReset)
+            }
+
+            Text(title)
+                .font(.fredoka(19, weight: .black))
+                .foregroundStyle(WhistleTheme.charcoal)
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+                .padding(.horizontal, 18)
+                .frame(height: 42)
+                .background {
+                    ZStack {
+                        Capsule()
+                            .fill(navTitleFill.darkened(0.40).opacity(dark ? 0.58 : 0.62))
+                            .offset(y: 2.5)
+                        Capsule()
+                            .fill(navTitleFill)
+                    }
+                }
+        }
+        .padding(.horizontal, 22)
+        .padding(.top, 8)
+        .padding(.bottom, 10)
+        .frame(height: 70)
+        .zIndex(2)
+    }
+
+    private func navButton(systemImage: String, action: @escaping () -> Void) -> some View {
+        Button {
+            HapticManager.tap(enabled: haptics)
+            action()
+        } label: {
+            Image(systemName: systemImage)
+                .font(.system(size: 17, weight: .black))
+                .foregroundStyle(WhistleTheme.charcoal)
+                .frame(width: 46, height: 46)
+                .background {
+                    ZStack {
+                        Circle()
+                            .fill(navButtonFill.darkened(0.42).opacity(dark ? 0.58 : 0.68))
+                            .offset(y: 3)
+                        Circle()
+                            .fill(navButtonFill)
+                    }
+                }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var navButtonFill: Color {
+        WhistleTheme.sunny
+    }
+
+    private var navTitleFill: Color {
+        dark ? WhistleTheme.amber.lightened(0.10) : WhistleTheme.cream.darkened(0.04)
+    }
+}
+
 struct ChunkyButton: View {
     var title: String
     var systemImage: String?

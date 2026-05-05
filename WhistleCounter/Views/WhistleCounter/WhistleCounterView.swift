@@ -24,76 +24,71 @@ struct WhistleCounterView: View {
     private var soundPack: SoundPack { SoundPack(rawValue: settings.soundPack) ?? .classic }
 
     var body: some View {
-        ZStack {
-            WhistleTheme.background(dark: dark)
-                .ignoresSafeArea()
+        GeometryReader { proxy in
+            ZStack {
+                PlayfulScreenBackground(dark: dark)
 
-            Circle()
-                .fill(WhistleTheme.sunny.opacity(0.28))
-                .frame(width: 290)
-                .blur(radius: 20)
-                .offset(y: -280)
+                VStack(spacing: 0) {
+                    header
 
-            VStack(spacing: 0) {
-                header
+                    Spacer()
 
-                VStack(spacing: 18) {
-                    SlotPickerView(title: "Target", value: targetBinding, range: 1...20, suffix: "whistles", tint: WhistleTheme.orange, haptics: settings.hapticsEnabled)
+                    VStack(spacing: 20) {
+                        SlotPickerView(title: "Target", value: targetBinding, range: 1...20, suffix: "whistles", tint: WhistleTheme.orange, haptics: settings.hapticsEnabled)
 
-                    HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        Text("\(vm.count)")
-                            .font(.fredoka(128, weight: .black))
-                            .foregroundStyle(WhistleTheme.text(dark: dark))
-                            .contentTransition(.numericText())
-                            .minimumScaleFactor(0.72)
-                        Text("/\(vm.target)")
-                            .font(.fredoka(48, weight: .black))
-                            .foregroundStyle(WhistleTheme.secondaryText(dark: dark))
-                    }
-                    .animation(.spring(response: 0.28, dampingFraction: 0.52), value: vm.count)
-
-                    WhistleMilestoneLabel(text: vm.milestone)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.top, 8)
-
-                WhistlyMascot(state: vm.mascotState, theme: MascotTheme.resolved(from: settings.mascotTheme), size: 174)
-                    .frame(height: 170)
-                    .padding(.top, 24)
-                    .padding(.bottom, 18)
-
-                VStack(spacing: 16) {
-                    ChunkyButton(
-                        title: listeningButtonTitle,
-                        systemImage: listeningButtonIcon,
-                        color: audioPlayer.isAlarmPlaying || vm.detector.isListening || vm.detector.isStarting ? WhistleTheme.orange : WhistleTheme.charcoal,
-                        fontSize: 17,
-                        fullWidth: true,
-                        activeGlow: vm.detector.isListening && !audioPlayer.isAlarmPlaying
-                    ) {
-                        HapticManager.tap(enabled: settings.hapticsEnabled)
-                        if audioPlayer.isAlarmPlaying {
-                            AudioPlayer.shared.stopAlarm()
-                        } else {
-                            vm.toggleListening(sensitivity: sensitivity)
+                        HStack(alignment: .firstTextBaseline, spacing: 4) {
+                            Text("\(vm.count)")
+                                .font(.fredoka(128, weight: .black))
+                                .foregroundStyle(WhistleTheme.text(dark: dark))
+                                .contentTransition(.numericText())
+                                .minimumScaleFactor(0.72)
+                            Text("/\(vm.target)")
+                                .font(.fredoka(48, weight: .black))
+                                .foregroundStyle(WhistleTheme.secondaryText(dark: dark))
                         }
-                    }
-                    .padding(.horizontal, 38)
+                        .animation(.spring(response: 0.28, dampingFraction: 0.52), value: vm.count)
 
-                    detectorStatus
+                        WhistleMilestoneLabel(text: vm.milestone)
 
-                    ChunkyButton(title: "Save to Cookbook", systemImage: "square.and.arrow.down.fill", color: WhistleTheme.sunny) {
-                        saveSetup()
+                        WhistlyMascot(state: vm.mascotState, theme: MascotTheme.resolved(from: settings.mascotTheme), size: 174)
+                            .frame(height: 170)
+
+                        ChunkyButton(
+                            title: listeningButtonTitle,
+                            systemImage: listeningButtonIcon,
+                            color: audioPlayer.isAlarmPlaying || vm.detector.isListening || vm.detector.isStarting ? WhistleTheme.orange : WhistleTheme.charcoal,
+                            fontSize: 17,
+                            fullWidth: true,
+                            activeGlow: vm.detector.isListening && !audioPlayer.isAlarmPlaying
+                        ) {
+                            HapticManager.tap(enabled: settings.hapticsEnabled)
+                            if audioPlayer.isAlarmPlaying {
+                                AudioPlayer.shared.stopAlarm()
+                            } else {
+                                vm.toggleListening(sensitivity: sensitivity)
+                            }
+                        }
+                        .padding(.horizontal, 38)
+
+                        detectorStatus
+
+                        ChunkyButton(title: "Save to Cookbook", systemImage: "square.and.arrow.down.fill", color: WhistleTheme.sunny) {
+                            saveSetup()
+                        }
+                        .frame(maxWidth: 235)
+                        .frame(maxWidth: .infinity, alignment: .center)
                     }
-                    .frame(maxWidth: 235)
-                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.horizontal, 22)
+                    .frame(maxWidth: .infinity)
+
+                    Spacer()
                 }
-                .padding(.bottom, 22)
-            }
+                .frame(width: proxy.size.width, height: proxy.size.height)
 
-            if vm.showConfetti {
-                ConfettiView()
-                    .ignoresSafeArea()
+                if vm.showConfetti {
+                    ConfettiView()
+                        .ignoresSafeArea()
+                }
             }
         }
         .onChange(of: vm.showReadyPopup) { _, showing in
@@ -126,47 +121,13 @@ struct WhistleCounterView: View {
     }
 
     private var header: some View {
-        HStack {
-            Button(action: onClose) {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 18, weight: .black))
-                    .frame(width: 44, height: 44)
-                    .foregroundStyle(WhistleTheme.text(dark: dark))
-                    .background {
-                        Circle()
-                            .fill(WhistleTheme.card(dark: dark))
-                            .shadow(color: WhistleTheme.shadow(dark: dark), radius: 7, y: 3)
-                    }
-            }
-            .buttonStyle(.plain)
-
-            Spacer()
-            Text("Whistle Counter")
-                .font(.fredoka(20, weight: .black))
-                .foregroundStyle(WhistleTheme.text(dark: dark))
-            Spacer()
-
-            Button {
-                HapticManager.tap(enabled: settings.hapticsEnabled)
-                vm.reset()
-            } label: {
-                Image(systemName: "arrow.counterclockwise")
-                    .font(.system(size: 16, weight: .black))
-                    .frame(width: 44, height: 44)
-                    .foregroundStyle(WhistleTheme.text(dark: dark))
-                    .background {
-                        Circle()
-                            .fill(WhistleTheme.card(dark: dark))
-                            .shadow(color: WhistleTheme.shadow(dark: dark), radius: 7, y: 3)
-                    }
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.horizontal, 22)
-        .padding(.top, 0)
-        .padding(.bottom, 10)
-        .offset(y: -38)
-        .zIndex(2)
+        FlowNavigationBar(
+            title: "Whistle Counter",
+            dark: dark,
+            haptics: settings.hapticsEnabled,
+            onBack: onClose,
+            onReset: { vm.reset() }
+        )
     }
 
     @ViewBuilder

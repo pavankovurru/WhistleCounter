@@ -27,8 +27,7 @@ struct TimerView: View {
             let ringDiameter = ringSize(for: proxy.size, compact: compact)
 
             ZStack {
-                WhistleTheme.background(dark: dark)
-                    .ignoresSafeArea()
+                PlayfulScreenBackground(dark: dark)
 
                 VStack(spacing: 0) {
                     header
@@ -42,9 +41,15 @@ struct TimerView: View {
 
                         presetPills(compact: compact)
 
-                        Spacer(minLength: compact ? 14 : 22)
+                        Spacer(minLength: compact ? 8 : 10)
 
-                        actionButtons(compact: compact)
+                        primaryTimerButton(compact: compact)
+
+                        Spacer()
+
+                        saveCookbookTimerButton()
+
+                        Spacer()
                     }
                     .padding(.horizontal, 22)
                     .padding(.bottom, max(proxy.safeAreaInsets.bottom + 12, 18))
@@ -72,49 +77,13 @@ struct TimerView: View {
     }
 
     private var header: some View {
-        HStack {
-            Button(action: onClose) {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 18, weight: .black))
-                    .frame(width: 44, height: 44)
-                    .foregroundStyle(WhistleTheme.text(dark: dark))
-                    .background {
-                        Circle()
-                            .fill(WhistleTheme.card(dark: dark))
-                            .shadow(color: WhistleTheme.shadow(dark: dark), radius: 7, y: 3)
-                    }
-            }
-            .buttonStyle(.plain)
-
-            Spacer()
-
-            Text("Kitchen Timer")
-                .font(.fredoka(20, weight: .black))
-                .foregroundStyle(WhistleTheme.text(dark: dark))
-
-            Spacer()
-
-            Button {
-                HapticManager.tap(enabled: settings.hapticsEnabled)
-                vm.reset()
-            } label: {
-                Image(systemName: "arrow.counterclockwise")
-                    .font(.system(size: 16, weight: .black))
-                    .frame(width: 44, height: 44)
-                    .foregroundStyle(WhistleTheme.text(dark: dark))
-                    .background {
-                        Circle()
-                            .fill(WhistleTheme.card(dark: dark))
-                            .shadow(color: WhistleTheme.shadow(dark: dark), radius: 7, y: 3)
-                    }
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.horizontal, 22)
-        .padding(.top, 0)
-        .padding(.bottom, 8)
-        .offset(y: -10)
-        .zIndex(2)
+        FlowNavigationBar(
+            title: "Kitchen Timer",
+            dark: dark,
+            haptics: settings.hapticsEnabled,
+            onBack: onClose,
+            onReset: { vm.reset() }
+        )
     }
 
     private func timerStage(compact: Bool, ringSize: CGFloat) -> some View {
@@ -122,9 +91,11 @@ struct TimerView: View {
             ZStack {
                 InteractiveTimerRing(
                     progress: ringProgress,
+                    totalProgress: ringTotalProgress,
                     tint: WhistleTheme.mint,
                     dark: dark,
                     isEnabled: !vm.isRunning && !vm.isDone,
+                    isCountdownMode: isCountdownActive,
                     haptics: settings.hapticsEnabled,
                     maxMinutes: maxRingMinutes
                 ) { duration in
@@ -252,40 +223,41 @@ struct TimerView: View {
         }
     }
 
-    private func actionButtons(compact: Bool) -> some View {
-        VStack(spacing: compact ? 10 : 12) {
-            ChunkyButton(
-                title: primaryButtonTitle,
-                systemImage: primaryButtonIcon,
-                color: primaryButtonColor,
-                fontSize: compact ? 16 : 18,
-                horizontalPadding: 18,
-                verticalPadding: compact ? 13 : 16,
-                cornerRadius: 26,
-                fullWidth: true
-            ) {
-                HapticManager.tap(enabled: settings.hapticsEnabled)
-                if vm.isDone {
-                    vm.reset()
-                } else {
-                    vm.toggle(soundPack: soundPack, haptics: settings.hapticsEnabled)
-                }
+    private func primaryTimerButton(compact: Bool) -> some View {
+        ChunkyButton(
+            title: primaryButtonTitle,
+            systemImage: primaryButtonIcon,
+            color: primaryButtonColor,
+            fontSize: 17,
+            horizontalPadding: 18,
+            verticalPadding: 14,
+            cornerRadius: 24,
+            fullWidth: true
+        ) {
+            HapticManager.tap(enabled: settings.hapticsEnabled)
+            if vm.isDone {
+                vm.reset()
+            } else {
+                vm.toggle(soundPack: soundPack, haptics: settings.hapticsEnabled)
             }
-
-            ChunkyButton(
-                title: "Save to Cookbook",
-                systemImage: "square.and.arrow.down.fill",
-                color: WhistleTheme.sunny,
-                fontSize: 17,
-                horizontalPadding: 18,
-                verticalPadding: 14,
-                cornerRadius: 24
-            ) {
-                saveTimer()
-            }
-            .frame(maxWidth: 235)
-            .frame(maxWidth: .infinity, alignment: .center)
         }
+        .padding(.horizontal, 38)
+    }
+
+    private func saveCookbookTimerButton() -> some View {
+        ChunkyButton(
+            title: "Save to Cookbook",
+            systemImage: "square.and.arrow.down.fill",
+            color: WhistleTheme.sunny,
+            fontSize: 17,
+            horizontalPadding: 18,
+            verticalPadding: 14,
+            cornerRadius: 24
+        ) {
+            saveTimer()
+        }
+        .frame(maxWidth: 235)
+        .frame(maxWidth: .infinity, alignment: .center)
     }
 
     private func presetTextColor(color: Color, active: Bool) -> Color {
@@ -301,31 +273,31 @@ struct TimerView: View {
         return min(compact ? 306 : 352, max(compact ? 268 : 314, min(widthBased, heightBased)))
     }
 
+    private var isCountdownActive: Bool {
+        vm.remaining < vm.totalDuration
+    }
+
+    // Current remaining mapped onto the max-ring scale — no jump on start/pause
     private var ringProgress: Double {
-        if vm.isRunning || vm.isDone {
-            return vm.progress
-        }
-        let minutes = max(1, vm.totalDuration / 60)
-        return min(1, max(0.01, minutes / Double(maxRingMinutes)))
+        vm.remaining / (Double(maxRingMinutes) * 60)
+    }
+
+    // The fixed "how much of the ring the user set" — stays constant while counting
+    private var ringTotalProgress: Double {
+        min(1, max(0.01, vm.totalDuration / (Double(maxRingMinutes) * 60)))
     }
 
     private var ringInstructionText: String {
-        if vm.isDone {
-            return "Alarm is playing"
-        }
-        if vm.isRunning {
-            return "Timer is running"
-        }
-        return "Drag the mint ring to set minutes"
+        if vm.isDone { return "Alarm is playing" }
+        if vm.isRunning { return "Timer is running" }
+        if vm.remaining < vm.totalDuration { return "Timer paused" }
+        return "Drag the ring to set your time"
     }
 
     private var statusText: String {
-        if vm.isDone {
-            return "Time's up"
-        }
-        if vm.isRunning {
-            return "Cooking in progress"
-        }
+        if vm.isDone { return "Time's up" }
+        if vm.isRunning { return "Cooking in progress" }
+        if vm.remaining < vm.totalDuration { return "Paused" }
         return "Ready when you are"
     }
 
@@ -363,7 +335,7 @@ struct TimerView: View {
         if vm.isRunning || vm.isDone {
             return WhistleTheme.orange
         }
-        return WhistleTheme.mint
+        return WhistleTheme.charcoal
     }
 
     private var hoursBinding: Binding<Int> {
@@ -416,16 +388,19 @@ struct TimerView: View {
 }
 
 struct InteractiveTimerRing: View {
-    var progress: Double
+    var progress: Double           // remaining / maxRingDuration
+    var totalProgress: Double      // totalDuration / maxRingDuration (fixed once started)
     var tint: Color
     var dark: Bool
     var isEnabled: Bool
+    var isCountdownMode: Bool = false
     var haptics: Bool
     var maxMinutes: Int
     var onDurationChange: (TimeInterval) -> Void
 
     @State private var activeDrag = false
     @State private var lastHapticBucket: Int?
+    @State private var dragFraction: Double = 0   // tracks raw drag angle for set-mode knob
 
     var body: some View {
         GeometryReader { proxy in
@@ -433,8 +408,16 @@ struct InteractiveTimerRing: View {
             let lineWidth = max(20, size * 0.072)
             let center = CGPoint(x: proxy.size.width / 2, y: proxy.size.height / 2)
             let radius = (size - lineWidth) / 2
-            let clampedProgress = min(1, max(0.006, progress))
-            let knobPoint = point(center: center, radius: radius, progress: clampedProgress)
+            let clampedProgress = min(1, max(0, progress))
+            let clampedTotal   = min(1, max(0.006, totalProgress))
+            // Arc: start advances CW as time elapses; end stays fixed at set-time position.
+            // In set mode clampedProgress == clampedTotal, so start == -90° (same as before).
+            let arcStartFraction = max(0, clampedTotal - clampedProgress)
+            // Knob: tracks the advancing (start) edge during countdown; tracks end of arc in set mode
+            let knobFraction: Double = isCountdownMode
+                ? arcStartFraction
+                : (activeDrag ? dragFraction : clampedTotal)
+            let knobPoint = point(center: center, radius: radius, progress: knobFraction)
 
             ZStack {
                 ForEach(0..<24, id: \.self) { index in
@@ -458,12 +441,18 @@ struct InteractiveTimerRing: View {
                         style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
                     )
 
+                    // Unified formula: end is fixed at the set-time position;
+                    // start advances clockwise as time is consumed.
+                    // In set mode arcStartFraction == 0, so start == -90° (no change).
+                    let arcStart = -90 + arcStartFraction * 360
+                    let arcEnd   = -90 + clampedTotal   * 360
+
                     var ring = Path()
                     ring.addArc(
                         center: canvasCenter,
                         radius: canvasRadius,
-                        startAngle: .degrees(-90),
-                        endAngle: .degrees(-90 + 360 * clampedProgress),
+                        startAngle: .degrees(arcStart),
+                        endAngle: .degrees(arcEnd),
                         clockwise: false
                     )
                     context.stroke(
@@ -520,6 +509,7 @@ struct InteractiveTimerRing: View {
         }
 
         let rawProgress = angle / (2 * .pi)
+        dragFraction = rawProgress   // keep knob following finger in set mode
         let minutes = min(maxMinutes, max(1, Int((rawProgress * Double(maxMinutes)).rounded())))
         onDurationChange(TimeInterval(minutes * 60))
 

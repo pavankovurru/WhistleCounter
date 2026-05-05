@@ -13,8 +13,7 @@ struct HomeView: View {
 
     var body: some View {
         ZStack {
-            WhistleTheme.background(dark: dark)
-                .ignoresSafeArea()
+            PlayfulScreenBackground(dark: dark)
 
             GeometryReader { proxy in
                 VStack(spacing: 0) {

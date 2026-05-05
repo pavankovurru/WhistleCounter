@@ -42,10 +42,14 @@ struct SettingsView: View {
 
             Spacer()
 
-            WhistlyMascot(state: .idle, theme: MascotTheme.resolved(from: settings.mascotTheme), size: 74, showsSteamPuffs: false)
-                .frame(width: 86, height: 86, alignment: .center)
-                .background(WhistleTheme.sunny, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+            ZStack {
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(WhistleTheme.sunny)
+                WhistlyMascot(state: .idle, theme: MascotTheme.resolved(from: settings.mascotTheme), size: 68, showsSteamPuffs: false)
+                    .offset(y: -3)
+            }
+            .frame(width: 86, height: 86)
+            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         }
     }
 
