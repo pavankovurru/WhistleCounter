@@ -37,13 +37,29 @@ enum WhistleTheme {
 }
 
 enum CookbookPalette {
+    private static let colors = [WhistleTheme.orange, Color.white, WhistleTheme.mint, WhistleTheme.charcoal, WhistleTheme.sunny]
+
+    static func color(for index: Int) -> Color {
+        colors[abs(index) % colors.count]
+    }
+
+    static func strokeColor(for index: Int) -> Color {
+        switch abs(index) % colors.count {
+        case 1:
+            WhistleTheme.charcoal.opacity(0.16)
+        case 3:
+            .white.opacity(0.18)
+        default:
+            WhistleTheme.charcoal.opacity(0.12)
+        }
+    }
+
     static func color(for cookbook: Cookbook) -> Color {
-        let colors = [WhistleTheme.orange, WhistleTheme.mint, WhistleTheme.cream, WhistleTheme.charcoal]
-        return colors[index(for: cookbook) % colors.count]
+        color(for: index(for: cookbook))
     }
 
     static func strokeColor(for cookbook: Cookbook) -> Color {
-        index(for: cookbook) % 4 == 3 ? .white.opacity(0.18) : WhistleTheme.charcoal.opacity(0.12)
+        strokeColor(for: index(for: cookbook))
     }
 
     private static func index(for cookbook: Cookbook) -> Int {

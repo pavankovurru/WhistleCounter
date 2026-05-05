@@ -45,9 +45,10 @@ struct CookbooksView: View {
                             .padding(.top, 40)
                     } else {
                         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                            ForEach(filteredCookbooks) { cookbook in
+                            ForEach(Array(filteredCookbooks.enumerated()), id: \.element.id) { index, cookbook in
                                 CookbookCard(
                                     cookbook: cookbook,
+                                    colorIndex: index,
                                     dark: dark,
                                     onCook: { onCook(cookbook) },
                                     onEdit: {
@@ -226,6 +227,7 @@ struct CookbooksView: View {
 
 struct CookbookCard: View {
     var cookbook: Cookbook
+    var colorIndex: Int
     var dark: Bool
     var onCook: () -> Void
     var onEdit: () -> Void
@@ -258,7 +260,7 @@ struct CookbookCard: View {
                         .font(.system(size: 15, weight: .black))
                         .foregroundStyle(WhistleTheme.charcoal)
                         .frame(width: 30, height: 30)
-                        .background(WhistleTheme.sunny, in: Circle())
+                        .background(.white, in: Circle())
                 }
                 .buttonStyle(.plain)
                 .padding(7)
@@ -310,11 +312,11 @@ struct CookbookCard: View {
     }
 
     private var cardColor: Color {
-        CookbookPalette.color(for: cookbook)
+        CookbookPalette.color(for: colorIndex)
     }
 
     private var cardStrokeColor: Color {
-        CookbookPalette.strokeColor(for: cookbook)
+        CookbookPalette.strokeColor(for: colorIndex)
     }
 
     private func tag(_ text: String, color: Color) -> some View {

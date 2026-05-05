@@ -102,11 +102,11 @@ struct HomeView: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    ForEach(recentCookbooks.prefix(6)) { cookbook in
+                    ForEach(Array(recentCookbooks.prefix(6).enumerated()), id: \.element.id) { index, cookbook in
                         Button {
                             onOpenCookbook(cookbook)
                         } label: {
-                            recentChip(cookbook)
+                            recentChip(cookbook, colorIndex: index)
                         }
                         .buttonStyle(.plain)
                     }
@@ -118,9 +118,9 @@ struct HomeView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func recentChip(_ cookbook: Cookbook) -> some View {
-        let color = CookbookPalette.color(for: cookbook)
-        let stroke = CookbookPalette.strokeColor(for: cookbook)
+    private func recentChip(_ cookbook: Cookbook, colorIndex: Int) -> some View {
+        let color = CookbookPalette.color(for: colorIndex)
+        let stroke = CookbookPalette.strokeColor(for: colorIndex)
         let fg: Color = color == WhistleTheme.charcoal || color == WhistleTheme.orange ? .white : WhistleTheme.charcoal
 
         return HStack(spacing: 7) {
