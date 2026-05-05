@@ -15,6 +15,8 @@ final class WhistleCounterVM: ObservableObject {
 
     private var cancellables: Set<AnyCancellable> = []
     private var hasLiveActivity = false
+    private var isRequestingLiveActivity = false
+    private var wantsLiveActivity = false
 
     private let milestones = [
         0: "Choose a target, then start listening.",
@@ -52,6 +54,9 @@ final class WhistleCounterVM: ObservableObject {
     func startListening(sensitivity: WhistleSensitivity) {
         detector.start(sensitivity: sensitivity)
         mascotState = .bouncing
+        Task { @MainActor [weak self] in
+            await self?.startLiveActivityWhenListening()
+        }
         // Only show "Setting up" if mic isn't already authorized and active
         if !detector.isListening {
             milestone = "Setting up the microphone..."
@@ -74,6 +79,7 @@ final class WhistleCounterVM: ObservableObject {
         count += 1
         mascotState = .bouncing
         refreshMilestone()
+        startLiveActivityIfNeeded()
         if hasLiveActivity {
             LiveActivityManager.shared.updateWhistle(count: count, target: target, isListening: detector.isListening, isFinished: count >= target)
         }
@@ -109,21 +115,47 @@ final class WhistleCounterVM: ObservableObject {
     private func handleListeningChanged(_ isListening: Bool) {
         if isListening {
             startLiveActivityIfNeeded()
-        } else if hasLiveActivity && count < target {
+        } else if count < target {
             endLiveActivity(finalStatus: "Stopped", dismissalDelay: 5)
         }
     }
 
     private func startLiveActivityIfNeeded() {
-        guard !hasLiveActivity, detector.isListening else { return }
-        hasLiveActivity = true
-        LiveActivityManager.shared.startWhistle(title: sourceCookbook?.name ?? "Whistle Counter", count: count, target: target)
+        guard !hasLiveActivity, !isRequestingLiveActivity, detector.isListening, count < target else { return }
+        wantsLiveActivity = true
+        isRequestingLiveActivity = true
+        LiveActivityManager.shared.startWhistle(title: sourceCookbook?.name ?? "Whistle Counter", count: count, target: target) { [weak self] didStart in
+            guard let self else { return }
+            self.isRequestingLiveActivity = false
+            let shouldKeepActivity = didStart && self.wantsLiveActivity && self.detector.isListening && self.count < self.target
+            self.hasLiveActivity = shouldKeepActivity
+            if didStart && !shouldKeepActivity {
+                LiveActivityManager.shared.endWhistle(finalStatus: self.count >= self.target ? "Target reached" : "Stopped", dismissalDelay: self.count >= self.target ? 30 : 5)
+            } else if shouldKeepActivity {
+                LiveActivityManager.shared.updateWhistle(count: self.count, target: self.target, isListening: self.detector.isListening, isFinished: false)
+            }
+        }
+    }
+
+    private func startLiveActivityWhenListening() async {
+        for _ in 0..<30 {
+            if detector.isListening {
+                startLiveActivityIfNeeded()
+                return
+            }
+            if !detector.isStarting {
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
     }
 
     private func endLiveActivity(finalStatus: String, dismissalDelay: TimeInterval = 30) {
-        guard hasLiveActivity else { return }
+        wantsLiveActivity = false
+        guard hasLiveActivity || isRequestingLiveActivity else { return }
+        isRequestingLiveActivity = false
         hasLiveActivity = false
-        LiveActivityManager.shared.end(finalStatus: finalStatus, dismissalDelay: dismissalDelay)
+        LiveActivityManager.shared.endWhistle(finalStatus: finalStatus, dismissalDelay: dismissalDelay)
     }
 
     private func refreshMilestone() {

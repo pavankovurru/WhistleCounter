@@ -115,7 +115,6 @@ struct WhistleCounterView: View {
         }
         .onDisappear {
             AudioPlayer.shared.stopAlarm()
-            vm.stopListening()
         }
     }
 
@@ -130,7 +129,7 @@ struct WhistleCounterView: View {
                             let isRightward = value.translation.width > 60
                             let isHorizontal = abs(value.translation.width) > abs(value.translation.height) * 1.5
                             if isRightward && isHorizontal {
-                                onClose()
+                                closeScreen()
                             }
                         }
                 )
@@ -153,9 +152,15 @@ struct WhistleCounterView: View {
             title: "Whistle Counter",
             dark: dark,
             haptics: settings.hapticsEnabled,
-            onBack: onClose,
+            onBack: closeScreen,
             onReset: { vm.reset() }
         )
+    }
+
+    private func closeScreen() {
+        AudioPlayer.shared.stopAlarm()
+        vm.stopListening()
+        onClose()
     }
 
     @ViewBuilder

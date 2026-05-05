@@ -72,7 +72,7 @@ final class TimerVM: ObservableObject {
         ticker = nil
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["WhistleCounterTimer"])
         if endLiveActivity {
-            LiveActivityManager.shared.end(finalStatus: "Timer paused", dismissalDelay: 5)
+            LiveActivityManager.shared.endTimer(finalStatus: "Timer paused", dismissalDelay: 5)
         }
     }
 
@@ -84,7 +84,7 @@ final class TimerVM: ObservableObject {
         pause(endLiveActivity: false)
         AudioPlayer.shared.stopAlarm()
         expectedEndDate = nil
-        LiveActivityManager.shared.end(finalStatus: "Timer reset")
+        LiveActivityManager.shared.endTimer(finalStatus: "Timer reset")
         remaining = totalDuration
         isDone = false
         showDonePopup = false
@@ -118,7 +118,7 @@ final class TimerVM: ObservableObject {
         isDone = true
         showDonePopup = true
         showConfetti = true
-        LiveActivityManager.shared.end(finalStatus: "Time's up")
+        LiveActivityManager.shared.endTimer(finalStatus: "Time's up")
         AudioPlayer.shared.playAlarm(pack: soundPack)
         HapticManager.warning(enabled: haptics)
     }
