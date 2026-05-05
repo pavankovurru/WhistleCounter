@@ -14,6 +14,7 @@ final class WhistleCounterVM: ObservableObject {
     var sourceCookbook: Cookbook?
 
     private var cancellables: Set<AnyCancellable> = []
+    private var hasLiveActivity = false
 
     private let milestones = [
         0: "Choose a target, then start listening.",
@@ -34,7 +35,8 @@ final class WhistleCounterVM: ObservableObject {
         }
         detector.$isListening
             .dropFirst()
-            .sink { [weak self] _ in
+            .sink { [weak self] isListening in
+                self?.handleListeningChanged(isListening)
                 self?.refreshMilestone()
             }
             .store(in: &cancellables)
@@ -49,7 +51,6 @@ final class WhistleCounterVM: ObservableObject {
 
     func startListening(sensitivity: WhistleSensitivity) {
         detector.start(sensitivity: sensitivity)
-        LiveActivityManager.shared.startWhistle(title: sourceCookbook?.name ?? "Whistle Counter", count: count, target: target)
         mascotState = .bouncing
         // Only show "Setting up" if mic isn't already authorized and active
         if !detector.isListening {
@@ -59,10 +60,7 @@ final class WhistleCounterVM: ObservableObject {
 
     func stopListening() {
         detector.stop()
-        LiveActivityManager.shared.updateWhistle(count: count, target: target, isListening: false, isFinished: count >= target)
-        if count == 0 || count >= target {
-            LiveActivityManager.shared.end(finalStatus: count >= target ? "Target reached" : "Stopped")
-        }
+        endLiveActivity(finalStatus: count >= target ? "Target reached" : "Stopped", dismissalDelay: count >= target ? 30 : 5)
         mascotState = .idle
         refreshMilestone()
     }
@@ -76,11 +74,13 @@ final class WhistleCounterVM: ObservableObject {
         count += 1
         mascotState = .bouncing
         refreshMilestone()
-        LiveActivityManager.shared.updateWhistle(count: count, target: target, isListening: detector.isListening, isFinished: count >= target)
+        if hasLiveActivity {
+            LiveActivityManager.shared.updateWhistle(count: count, target: target, isListening: detector.isListening, isFinished: count >= target)
+        }
 
         if count >= target {
             detector.stop()
-            LiveActivityManager.shared.end(finalStatus: "Target reached")
+            endLiveActivity(finalStatus: "Target reached")
             mascotState = .celebrating
             showConfetti = true
             showReadyPopup = true
@@ -89,7 +89,7 @@ final class WhistleCounterVM: ObservableObject {
 
     func reset() {
         detector.stop()
-        LiveActivityManager.shared.end(finalStatus: "Reset")
+        endLiveActivity(finalStatus: "Reset", dismissalDelay: 5)
         count = 0
         mascotState = .idle
         showReadyPopup = false
@@ -101,7 +101,29 @@ final class WhistleCounterVM: ObservableObject {
         target = min(20, max(1, newTarget))
         count = min(count, target)
         refreshMilestone()
-        LiveActivityManager.shared.updateWhistle(count: count, target: target, isListening: detector.isListening, isFinished: count >= target)
+        if hasLiveActivity {
+            LiveActivityManager.shared.updateWhistle(count: count, target: target, isListening: detector.isListening, isFinished: count >= target)
+        }
+    }
+
+    private func handleListeningChanged(_ isListening: Bool) {
+        if isListening {
+            startLiveActivityIfNeeded()
+        } else if hasLiveActivity && count < target {
+            endLiveActivity(finalStatus: "Stopped", dismissalDelay: 5)
+        }
+    }
+
+    private func startLiveActivityIfNeeded() {
+        guard !hasLiveActivity, detector.isListening else { return }
+        hasLiveActivity = true
+        LiveActivityManager.shared.startWhistle(title: sourceCookbook?.name ?? "Whistle Counter", count: count, target: target)
+    }
+
+    private func endLiveActivity(finalStatus: String, dismissalDelay: TimeInterval = 30) {
+        guard hasLiveActivity else { return }
+        hasLiveActivity = false
+        LiveActivityManager.shared.end(finalStatus: finalStatus, dismissalDelay: dismissalDelay)
     }
 
     private func refreshMilestone() {

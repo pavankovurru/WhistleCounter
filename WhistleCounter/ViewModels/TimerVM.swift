@@ -58,6 +58,10 @@ final class TimerVM: ObservableObject {
     }
 
     func pause() {
+        pause(endLiveActivity: true)
+    }
+
+    private func pause(endLiveActivity: Bool) {
         // Snap remaining to clock BEFORE changing isRunning so the LA update is accurate
         if let end = expectedEndDate {
             remaining = max(0, end.timeIntervalSinceNow.rounded(.up))
@@ -67,8 +71,9 @@ final class TimerVM: ObservableObject {
         ticker?.invalidate()
         ticker = nil
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["WhistleCounterTimer"])
-        // Send single correct update — isRunning is now false
-        LiveActivityManager.shared.updateTimer(remaining: remaining, total: totalDuration, isRunning: false, isFinished: false)
+        if endLiveActivity {
+            LiveActivityManager.shared.end(finalStatus: "Timer paused", dismissalDelay: 5)
+        }
     }
 
     func toggle(soundPack: SoundPack, haptics: Bool) {
@@ -76,7 +81,7 @@ final class TimerVM: ObservableObject {
     }
 
     func reset() {
-        pause()
+        pause(endLiveActivity: false)
         AudioPlayer.shared.stopAlarm()
         expectedEndDate = nil
         LiveActivityManager.shared.end(finalStatus: "Timer reset")

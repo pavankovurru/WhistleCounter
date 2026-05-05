@@ -14,6 +14,8 @@ final class AudioPlayer: ObservableObject {
     private var alarmNode: AVAudioPlayerNode?
     private var alarmBuffer: AVAudioPCMBuffer?
     private var alarmStopTask: Task<Void, Never>?
+    private var previewPlayer: AVAudioPlayer?
+    private var previewStopTask: Task<Void, Never>?
 
 
     func playWhistle() {
@@ -25,6 +27,7 @@ final class AudioPlayer: ObservableObject {
     }
 
     func playAlarm(pack: SoundPack) {
+        stopAlarmPreview()
         stopAlarm()            // stop & clear the old player first
         configureAlarmSession() // then set up a fresh session
         let resourceName = "alarm_\(pack.rawValue.lowercased())"
@@ -45,6 +48,39 @@ final class AudioPlayer: ObservableObject {
         }
     }
 
+    func previewAlarm(pack: SoundPack, duration: TimeInterval = 2) {
+        stopAlarmPreview()
+        configureAlarmSession()
+        let resourceName = "alarm_\(pack.rawValue.lowercased())"
+        if let url = Bundle.main.url(forResource: resourceName, withExtension: "mp3"),
+           let player = try? AVAudioPlayer(contentsOf: url) {
+            previewPlayer = player
+            player.numberOfLoops = 0
+            player.volume = 0.9
+            player.currentTime = 0
+            player.prepareToPlay()
+            player.play()
+            previewStopTask = Task { @MainActor in
+                try? await Task.sleep(for: .seconds(duration))
+                stopAlarmPreview()
+            }
+        } else if let data = makeProceduralAlarmWAV(pack: pack),
+                  let player = try? AVAudioPlayer(data: data) {
+            previewPlayer = player
+            player.numberOfLoops = 0
+            player.volume = pack == .zen ? 0.85 : 0.9
+            player.currentTime = 0
+            player.prepareToPlay()
+            player.play()
+            previewStopTask = Task { @MainActor in
+                try? await Task.sleep(for: .seconds(duration))
+                stopAlarmPreview()
+            }
+        } else {
+            AudioServicesPlaySystemSound(1005)
+        }
+    }
+
     func stopAlarm() {
         alarmStopTask?.cancel()
         alarmStopTask = nil
@@ -57,6 +93,13 @@ final class AudioPlayer: ObservableObject {
         alarmEngine = nil
         alarmBuffer = nil
         isAlarmPlaying = false
+    }
+
+    func stopAlarmPreview() {
+        previewStopTask?.cancel()
+        previewStopTask = nil
+        previewPlayer?.stop()
+        previewPlayer = nil
     }
 
     private func playResource(name: String, fallback: SystemSoundID) {

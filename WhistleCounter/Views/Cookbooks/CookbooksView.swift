@@ -57,6 +57,9 @@ struct CookbooksView: View {
                                     onDelete: {
                                         pendingDeleteCookbook = cookbook
                                     },
+                                    onActions: {
+                                        actionCookbook = cookbook
+                                    },
                                     onLongPress: {
                                         actionCookbook = cookbook
                                     }
@@ -201,8 +204,9 @@ struct CookbooksView: View {
         switch cookbook.name.lowercased() {
         case "toor dal": 0
         case "rajma": 1
-        case "soft eggs": 2
-        case "chicken curry": 3
+        case "eggs": 2
+        case "idly": 3
+        case "chicken": 4
         default: 100
         }
     }
@@ -226,6 +230,7 @@ struct CookbookCard: View {
     var onCook: () -> Void
     var onEdit: () -> Void
     var onDelete: () -> Void
+    var onActions: () -> Void
     var onLongPress: () -> Void
 
     var body: some View {
@@ -239,21 +244,23 @@ struct CookbookCard: View {
                             .stroke(cardStrokeColor, lineWidth: 1.2)
                     }
                     .overlay {
-                        Text(cookbook.emoji)
-                            .font(.system(size: 58))
-                            .shadow(color: .black.opacity(0.12), radius: 6, y: 3)
+                        if cookbook.isIdly {
+                            IdlyPiecesIcon(size: 64)
+                        } else {
+                            Text(cookbook.emoji)
+                                .font(.system(size: 58))
+                                .shadow(color: .black.opacity(0.12), radius: 6, y: 3)
+                        }
                     }
 
-                Menu {
-                    Button("Edit", systemImage: "pencil", action: onEdit)
-                    Button("Delete", systemImage: "trash", role: .destructive, action: onDelete)
-                } label: {
+                Button(action: onActions) {
                     Image(systemName: "ellipsis")
                         .font(.system(size: 15, weight: .black))
                         .foregroundStyle(WhistleTheme.charcoal)
                         .frame(width: 30, height: 30)
                         .background(WhistleTheme.sunny, in: Circle())
                 }
+                .buttonStyle(.plain)
                 .padding(7)
             }
 
@@ -320,6 +327,46 @@ struct CookbookCard: View {
     }
 }
 
+struct IdlyPiecesIcon: View {
+    var size: CGFloat
+
+    var body: some View {
+        ZStack {
+            idlyPiece(width: size * 0.52, height: size * 0.36)
+                .offset(x: -size * 0.16, y: size * 0.08)
+            idlyPiece(width: size * 0.52, height: size * 0.36)
+                .offset(x: size * 0.17, y: size * 0.09)
+            idlyPiece(width: size * 0.56, height: size * 0.38)
+                .offset(y: -size * 0.14)
+        }
+        .frame(width: size, height: size)
+        .shadow(color: .black.opacity(0.16), radius: 5, y: 3)
+    }
+
+    private func idlyPiece(width: CGFloat, height: CGFloat) -> some View {
+        Ellipse()
+            .fill(
+                RadialGradient(
+                    colors: [.white, Color(hex: 0xFFF8EE), Color(hex: 0xECE4D8)],
+                    center: UnitPoint(x: 0.36, y: 0.28),
+                    startRadius: 1,
+                    endRadius: width
+                )
+            )
+            .frame(width: width, height: height)
+            .overlay {
+                Ellipse()
+                    .stroke(.white.opacity(0.8), lineWidth: 1.2)
+            }
+    }
+}
+
+extension Cookbook {
+    var isIdly: Bool {
+        name.trimmingCharacters(in: .whitespacesAndNewlines).localizedCaseInsensitiveCompare("idly") == .orderedSame
+    }
+}
+
 struct CookbookEditorSheet: View {
     @Environment(\.colorScheme) private var colorScheme
 
@@ -353,20 +400,21 @@ struct CookbookEditorSheet: View {
 
                 GeometryReader { proxy in
                     let compact = proxy.size.height < 760
+                    let verticalGap: CGFloat = compact ? 4 : 6
 
                     VStack(alignment: .leading, spacing: 0) {
                         editorTopRow(compact: compact)
-                        Spacer(minLength: compact ? 8 : 12)
+                        Spacer(minLength: verticalGap)
                         dishCard(compact: compact)
-                        Spacer(minLength: compact ? 8 : 14)
+                        Spacer(minLength: verticalGap)
                         setupCard(compact: compact)
-                        Spacer(minLength: compact ? 8 : 14)
+                        Spacer(minLength: verticalGap)
                         notesCard(compact: compact)
-                        Spacer(minLength: compact ? 8 : 14)
+                        Spacer(minLength: verticalGap)
                         saveButton(compact: compact)
                     }
                     .padding(.horizontal, 22)
-                    .padding(.top, compact ? 4 : 10)
+                    .padding(.top, compact ? 18 : 26)
                     .padding(.bottom, max(proxy.safeAreaInsets.bottom + 12, 20))
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 }
@@ -386,18 +434,20 @@ struct CookbookEditorSheet: View {
     }
 
     private func editorTopRow(compact: Bool) -> some View {
-        HStack(alignment: .top, spacing: 12) {
+        ZStack {
             editorHeader(compact: compact)
-            Spacer(minLength: 8)
+                .frame(maxWidth: .infinity, alignment: .center)
             closeIconButton
+                .frame(maxWidth: .infinity, alignment: .trailing)
         }
     }
 
     private func editorHeader(compact: Bool) -> some View {
-        VStack(alignment: .leading, spacing: compact ? 2 : 4) {
+        VStack(alignment: .center, spacing: compact ? 2 : 4) {
             Text(cookbook == nil ? "Add Cookbook" : "Tune Cookbook")
                 .font(.fredoka(compact ? 28 : 32, weight: .black))
                 .foregroundStyle(WhistleTheme.text(dark: dark))
+                .multilineTextAlignment(.center)
         }
     }
 
@@ -491,9 +541,9 @@ struct CookbookEditorSheet: View {
             TextField("Tiny note, spice level, soaking time...", text: $notes, axis: .vertical)
                 .font(.nunito(16, weight: .bold))
                 .foregroundStyle(WhistleTheme.text(dark: dark))
-                .lineLimit(compact ? 2 : 3, reservesSpace: true)
+                .lineLimit(compact ? 3 : 4, reservesSpace: true)
                 .padding(.horizontal, 12)
-                .padding(.vertical, compact ? 9 : 11)
+                .padding(.vertical, compact ? 10 : 13)
                 .background(WhistleTheme.background(dark: dark), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
     }

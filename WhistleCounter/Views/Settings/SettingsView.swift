@@ -139,7 +139,7 @@ struct SettingsView: View {
     }
 
     private var whistlyColorCard: some View {
-        settingsSection(title: "Whistly Color", icon: "paintpalette.fill", tint: WhistleTheme.blue) {
+        settingsSection(title: "Whistly Color", icon: "paintpalette.fill", tint: themeFill(MascotTheme.resolved(from: settings.mascotTheme))) {
             HStack(spacing: 9) {
                 ForEach(MascotTheme.allCases) { theme in
                     mascotButton(theme)
@@ -263,7 +263,7 @@ struct SettingsView: View {
             withAnimation(.spring(response: 0.28, dampingFraction: 0.68)) {
                 settings.soundPack = pack.rawValue
             }
-            AudioPlayer.shared.playAlarm(pack: pack)
+            AudioPlayer.shared.previewAlarm(pack: pack, duration: 2)
         } label: {
             VStack(spacing: 6) {
                 Text(pack.emoji)

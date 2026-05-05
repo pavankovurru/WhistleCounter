@@ -16,6 +16,7 @@ struct WhistlyMascot: View {
     var size: CGFloat = 180
     var showsSteamPuffs = true
     var isAnimated = true
+    var keepsBodyPosition = true
 
     @State private var motion = false
 
@@ -43,10 +44,6 @@ struct WhistlyMascot: View {
             }
         }
         .frame(width: size, height: size)
-        .scaleEffect(wrapperScale)
-        .rotationEffect(.degrees(wrapperRotation))
-        .offset(y: wrapperYOffset)
-        .animation(isAnimated ? wrapperAnimation : nil, value: motion)
         .onAppear {
             guard isAnimated else { return }
             motion = true
@@ -55,6 +52,10 @@ struct WhistlyMascot: View {
 
     private var activeMotion: Bool {
         isAnimated && motion
+    }
+
+    private var activeBodyMotion: Bool {
+        activeMotion && !keepsBodyPosition
     }
 
     private var colors: WhistlyColors {
@@ -73,26 +74,26 @@ struct WhistlyMascot: View {
     private var wrapperScale: CGFloat {
         switch state {
         case .bouncing:
-            activeMotion ? 1.04 : 0.98
+            activeBodyMotion ? 1.04 : 0.98
         case .celebrating:
-            activeMotion ? 1.05 : 0.99
+            activeBodyMotion ? 1.05 : 0.99
         case .shocked:
             1.0
         case .sleeping:
-            activeMotion ? 1.025 : 1.0
+            activeBodyMotion ? 1.025 : 1.0
         default:
-            activeMotion ? 1.018 : 1.0
+            activeBodyMotion ? 1.018 : 1.0
         }
     }
 
     private var wrapperRotation: Double {
         switch state {
         case .waving:
-            activeMotion ? 4 : -4
+            activeBodyMotion ? 4 : -4
         case .shocked:
-            activeMotion ? 3 : -3
+            activeBodyMotion ? 3 : -3
         case .celebrating:
-            activeMotion ? 3 : -3
+            activeBodyMotion ? 3 : -3
         default:
             0
         }
@@ -101,11 +102,11 @@ struct WhistlyMascot: View {
     private var wrapperYOffset: CGFloat {
         switch state {
         case .bouncing:
-            activeMotion ? -12 : 0
+            activeBodyMotion ? -12 : 0
         case .celebrating:
-            activeMotion ? -16 : 0
+            activeBodyMotion ? -16 : 0
         case .sleeping:
-            activeMotion ? 2 : 0
+            activeBodyMotion ? 2 : 0
         default:
             0
         }

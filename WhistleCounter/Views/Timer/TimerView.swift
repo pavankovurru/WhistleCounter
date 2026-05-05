@@ -10,6 +10,7 @@ struct TimerView: View {
     @StateObject private var vm: TimerVM
     @State private var didLogCompletion = false
     @State private var didSaveCookbook = false
+    @State private var startPulse = false
     var onClose: () -> Void
 
     private let maxRingMinutes = 180
@@ -63,8 +64,7 @@ struct TimerView: View {
                         .ignoresSafeArea()
                 }
 
-                // Left-edge swipe-back gesture (mirrors iOS navigation back swipe)
-                edgeSwipeDismiss
+                edgeSwipeBack
             }
         }
         .onChange(of: vm.isDone) { _, isDone in
@@ -96,17 +96,36 @@ struct TimerView: View {
         )
     }
 
+    private var edgeSwipeBack: some View {
+        HStack {
+            Color.clear
+                .frame(width: 28)
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 15, coordinateSpace: .global)
+                        .onEnded { value in
+                            let isRightward = value.translation.width > 60
+                            let isHorizontal = abs(value.translation.width) > abs(value.translation.height) * 1.5
+                            if isRightward && isHorizontal {
+                                onClose()
+                            }
+                        }
+                )
+            Spacer()
+        }
+        .ignoresSafeArea()
+        .zIndex(99)
+    }
+
     private func timerStage(compact: Bool, ringSize: CGFloat) -> some View {
         VStack(spacing: compact ? 10 : 14) {
             ZStack {
                 InteractiveTimerRing(
-                    progress: ringProgress,
-                    totalProgress: ringTotalProgress,
-                    tint: WhistleTheme.mint,
+                    progress: isCountdownActive ? countdownFillProgress : ringProgress,
+                    totalProgress: isCountdownActive ? 1 : ringTotalProgress,
+                    tint: vm.isDone ? WhistleTheme.orange : WhistleTheme.mint,
                     dark: dark,
-                    // Disable drag once countdown has started to prevent accidentally
-                    // wiping the remaining time while the timer is paused mid-way.
-                    isEnabled: !vm.isRunning && !vm.isDone && !isCountdownActive,
+                    isEnabled: !isCountdownActive,
                     isCountdownMode: isCountdownActive,
                     haptics: settings.hapticsEnabled,
                     maxMinutes: maxRingMinutes
@@ -114,35 +133,48 @@ struct TimerView: View {
                     vm.setDuration(duration)
                 }
                 .frame(width: ringSize, height: ringSize)
+                .scaleEffect(startPulse ? 1.025 : 1)
 
                 VStack(spacing: compact ? 4 : 7) {
-                    WhistlyMascot(
-                        state: vm.isDone ? .shocked : (vm.isRunning ? .sleeping : .idle),
-                        theme: MascotTheme.resolved(from: settings.mascotTheme),
-                        size: compact ? 86 : 104,
-                        showsSteamPuffs: false
-                    )
-                    .frame(height: compact ? 76 : 92)
+                    if !isCountdownActive {
+                        WhistlyMascot(
+                            state: .idle,
+                            theme: MascotTheme.resolved(from: settings.mascotTheme),
+                            size: compact ? 86 : 104,
+                            showsSteamPuffs: false,
+                            isAnimated: false
+                        )
+                        .frame(height: compact ? 76 : 92)
+                    }
 
                     Text(vm.remaining.clockText)
-                        .font(.fredoka(compact ? 45 : 56, weight: .black))
+                        .font(.fredoka(countdownTimeFontSize(compact: compact), weight: .black))
                         .foregroundStyle(WhistleTheme.text(dark: dark))
                         .monospacedDigit()
                         .contentTransition(.numericText())
                         .lineLimit(1)
-                        .minimumScaleFactor(0.70)
+                        .minimumScaleFactor(0.66)
 
                     Text(statusText)
                         .font(.fredoka(compact ? 13 : 15, weight: .black))
                         .foregroundStyle(statusColor)
                         .lineLimit(1)
                         .minimumScaleFactor(0.82)
+
+                    if isCountdownActive {
+                        Text("\(Int((countdownFillProgress * 100).rounded()))% done")
+                            .font(.nunito(compact ? 12 : 13, weight: .black))
+                            .foregroundStyle(WhistleTheme.secondaryText(dark: dark))
+                            .monospacedDigit()
+                    }
                 }
                 .frame(width: ringSize * 0.66)
+                .animation(.spring(response: 0.32, dampingFraction: 0.82), value: isCountdownActive)
             }
+            .animation(.spring(response: 0.28, dampingFraction: 0.70), value: startPulse)
 
             Text(ringInstructionText)
-                .font(.nunito(compact ? 12 : 13, weight: .black))
+                .font(.nunito(compact ? 14 : 16, weight: .black))
                 .foregroundStyle(WhistleTheme.secondaryText(dark: dark))
                 .lineLimit(1)
                 .minimumScaleFactor(0.82)
@@ -250,10 +282,26 @@ struct TimerView: View {
             if vm.isDone {
                 vm.reset()
             } else {
+                if !vm.isRunning {
+                    triggerStartPulse()
+                }
                 vm.toggle(soundPack: soundPack, haptics: settings.hapticsEnabled)
             }
         }
         .padding(.horizontal, 38)
+    }
+
+    private func triggerStartPulse() {
+        startPulse = false
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.55)) {
+            startPulse = true
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(650))
+            withAnimation(.easeOut(duration: 0.25)) {
+                startPulse = false
+            }
+        }
     }
 
     private func saveCookbookTimerButton() -> some View {
@@ -286,7 +334,16 @@ struct TimerView: View {
     }
 
     private var isCountdownActive: Bool {
-        vm.remaining < vm.totalDuration
+        vm.isRunning || vm.isDone || vm.remaining < vm.totalDuration
+    }
+
+    private func countdownTimeFontSize(compact: Bool) -> CGFloat {
+        isCountdownActive ? (compact ? 56 : 66) : (compact ? 45 : 56)
+    }
+
+    private var countdownFillProgress: Double {
+        guard vm.totalDuration > 0 else { return 1 }
+        return min(1, max(0, 1 - (vm.remaining / vm.totalDuration)))
     }
 
     // Current remaining mapped onto the max-ring scale — no jump on start/pause
@@ -301,8 +358,8 @@ struct TimerView: View {
 
     private var ringInstructionText: String {
         if vm.isDone { return "Alarm is playing" }
-        if vm.isRunning { return "Timer is running" }
-        if vm.remaining < vm.totalDuration { return "Timer paused" }
+        if vm.isRunning { return "Ring fills as the timer runs" }
+        if vm.remaining < vm.totalDuration { return "Paused with time saved" }
         return "Drag the ring to set your time"
     }
 
@@ -383,27 +440,6 @@ struct TimerView: View {
         vm.setDuration(TimeInterval(max(1, h * 3600 + m * 60 + s)))
     }
 
-    private var edgeSwipeDismiss: some View {
-        HStack {
-            Color.clear
-                .frame(width: 22)
-                .contentShape(Rectangle())
-                .gesture(
-                    DragGesture(minimumDistance: 15, coordinateSpace: .global)
-                        .onEnded { value in
-                            let isRightward = value.translation.width > 60
-                            let isHorizontal = abs(value.translation.width) > abs(value.translation.height) * 1.5
-                            if isRightward && isHorizontal {
-                                onClose()
-                            }
-                        }
-                )
-            Spacer()
-        }
-        .ignoresSafeArea()
-        .zIndex(99)
-    }
-
     private func saveTimer() {
         guard !didSaveCookbook else { return }
         didSaveCookbook = true
@@ -445,14 +481,13 @@ struct InteractiveTimerRing: View {
             let radius = (size - lineWidth) / 2
             let clampedProgress = min(1, max(0, progress))
             let clampedTotal   = min(1, max(0.006, totalProgress))
-            // Arc: start advances CW as time elapses; end stays fixed at set-time position.
-            // In set mode clampedProgress == clampedTotal, so start == -90° (same as before).
-            let arcStartFraction = max(0, clampedTotal - clampedProgress)
-            // Knob: tracks the advancing (start) edge during countdown; tracks end of arc in set mode
+            let arcStartFraction = 0.0
+            let arcEndFraction = isCountdownMode ? clampedProgress : clampedTotal
             let knobFraction: Double = isCountdownMode
-                ? arcStartFraction
+                ? clampedProgress
                 : (activeDrag ? dragFraction : clampedTotal)
             let knobPoint = point(center: center, radius: radius, progress: knobFraction)
+            let knobColor = isCountdownMode ? tint : WhistleTheme.orange
 
             ZStack {
                 ForEach(0..<24, id: \.self) { index in
@@ -476,11 +511,8 @@ struct InteractiveTimerRing: View {
                         style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
                     )
 
-                    // Unified formula: end is fixed at the set-time position;
-                    // start advances clockwise as time is consumed.
-                    // In set mode arcStartFraction == 0, so start == -90° (no change).
                     let arcStart = -90 + arcStartFraction * 360
-                    let arcEnd   = -90 + clampedTotal   * 360
+                    let arcEnd   = -90 + arcEndFraction * 360
 
                     var ring = Path()
                     ring.addArc(
@@ -498,12 +530,12 @@ struct InteractiveTimerRing: View {
                 }
 
                 Circle()
-                    .fill(WhistleTheme.orange.darkened(0.42).opacity(0.62))
+                    .fill(knobColor.darkened(0.42).opacity(0.62))
                     .frame(width: lineWidth * 1.16, height: lineWidth * 1.16)
                     .position(x: knobPoint.x, y: knobPoint.y + (activeDrag ? 3 : 5))
 
                 Circle()
-                    .fill(WhistleTheme.orange)
+                    .fill(knobColor)
                     .frame(width: lineWidth * 1.16, height: lineWidth * 1.16)
                     .overlay {
                         Circle()
@@ -568,6 +600,138 @@ struct InteractiveTimerRing: View {
             return WhistleTheme.orange.opacity(dark ? 0.90 : 0.82)
         }
         return WhistleTheme.mint.opacity(dark ? 0.38 : 0.34)
+    }
+}
+
+struct CountdownFillCircle: View {
+    var progress: Double
+    var timeText: String
+    var statusText: String
+    var statusColor: Color
+    var tint: Color
+    var dark: Bool
+    var compact: Bool
+    var pulse: Bool
+
+    var body: some View {
+        GeometryReader { proxy in
+            let size = min(proxy.size.width, proxy.size.height)
+            let clamped = min(1, max(0, progress))
+            let timerShape = TimerGlassShape()
+
+            ZStack {
+                timerShape
+                    .fill(WhistleTheme.card(dark: dark))
+                    .shadow(color: WhistleTheme.shadow(dark: dark), radius: 10, y: 5)
+
+                timerShape
+                    .stroke(tint.opacity(dark ? 0.42 : 0.30), lineWidth: max(8, size * 0.028))
+                    .padding(size * 0.035)
+
+                timerShape
+                    .stroke(.white.opacity(dark ? 0.10 : 0.46), lineWidth: max(2, size * 0.008))
+                    .padding(size * 0.065)
+
+                Capsule(style: .continuous)
+                    .fill(WhistleTheme.card(dark: dark))
+                    .overlay {
+                        Capsule(style: .continuous)
+                            .stroke(tint.opacity(dark ? 0.48 : 0.34), lineWidth: max(5, size * 0.018))
+                    }
+                    .frame(width: size * 0.57, height: size * 0.12)
+                    .offset(y: -size * 0.36)
+                    .shadow(color: .black.opacity(dark ? 0.18 : 0.08), radius: 4, y: 2)
+
+                GeometryReader { fillProxy in
+                    VStack(spacing: 0) {
+                        Spacer(minLength: 0)
+                        Rectangle()
+                            .fill(
+                                LinearGradient(
+                                    colors: [tint.lightened(0.14), tint],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
+                            .frame(height: fillProxy.size.height * clamped)
+                    }
+                }
+                .clipShape(timerShape)
+                .padding(size * 0.085)
+                .overlay {
+                    timerShape
+                        .stroke(tint.darkened(0.18).opacity(dark ? 0.22 : 0.18), lineWidth: 2)
+                        .padding(size * 0.085)
+                }
+
+                timerShape
+                    .stroke(tint.opacity(pulse ? 0.36 : 0), lineWidth: 5)
+                    .scaleEffect(pulse ? 1.06 : 0.92)
+                    .padding(size * 0.03)
+
+                VStack(spacing: compact ? 7 : 9) {
+                    Text(timeText)
+                        .font(.fredoka(compact ? 48 : 58, weight: .black))
+                        .foregroundStyle(WhistleTheme.text(dark: dark))
+                        .monospacedDigit()
+                        .contentTransition(.numericText())
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.64)
+
+                    Text(statusText)
+                        .font(.fredoka(compact ? 13 : 15, weight: .black))
+                        .foregroundStyle(statusColor)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
+
+                    Text("\(Int((clamped * 100).rounded()))%")
+                        .font(.nunito(compact ? 12 : 13, weight: .black))
+                        .foregroundStyle(WhistleTheme.secondaryText(dark: dark))
+                        .monospacedDigit()
+                }
+                .frame(width: size * 0.66)
+            }
+            .animation(.linear(duration: 0.35), value: progress)
+            .animation(.spring(response: 0.28, dampingFraction: 0.62), value: pulse)
+        }
+    }
+}
+
+private struct TimerGlassShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        let w = rect.width
+        let h = rect.height
+        var path = Path()
+
+        path.move(to: CGPoint(x: rect.minX + w * 0.20, y: rect.minY + h * 0.17))
+        path.addCurve(
+            to: CGPoint(x: rect.minX + w * 0.80, y: rect.minY + h * 0.17),
+            control1: CGPoint(x: rect.minX + w * 0.34, y: rect.minY + h * 0.07),
+            control2: CGPoint(x: rect.minX + w * 0.66, y: rect.minY + h * 0.07)
+        )
+        path.addCurve(
+            to: CGPoint(x: rect.minX + w * 0.75, y: rect.minY + h * 0.86),
+            control1: CGPoint(x: rect.minX + w * 0.84, y: rect.minY + h * 0.38),
+            control2: CGPoint(x: rect.minX + w * 0.81, y: rect.minY + h * 0.68)
+        )
+        path.addCurve(
+            to: CGPoint(x: rect.minX + w * 0.50, y: rect.minY + h * 0.95),
+            control1: CGPoint(x: rect.minX + w * 0.69, y: rect.minY + h * 0.94),
+            control2: CGPoint(x: rect.minX + w * 0.59, y: rect.minY + h * 0.95)
+        )
+        path.addCurve(
+            to: CGPoint(x: rect.minX + w * 0.25, y: rect.minY + h * 0.86),
+            control1: CGPoint(x: rect.minX + w * 0.41, y: rect.minY + h * 0.95),
+            control2: CGPoint(x: rect.minX + w * 0.31, y: rect.minY + h * 0.94)
+        )
+        path.addCurve(
+            to: CGPoint(x: rect.minX + w * 0.20, y: rect.minY + h * 0.17),
+            control1: CGPoint(x: rect.minX + w * 0.19, y: rect.minY + h * 0.68),
+            control2: CGPoint(x: rect.minX + w * 0.16, y: rect.minY + h * 0.38)
+        )
+        path.closeSubpath()
+
+        return path
     }
 }
 

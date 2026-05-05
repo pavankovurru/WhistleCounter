@@ -28,11 +28,13 @@ struct HomeView: View {
                         WhistlyMascot(
                             state: mascotState,
                             theme: MascotTheme.resolved(from: settings.mascotTheme),
-                            size: mascotSize(for: proxy.size.height)
+                            size: mascotSize(for: proxy.size.height),
+                            showsSteamPuffs: true,
+                            isAnimated: true,
+                            keepsBodyPosition: true
                         )
                         .frame(maxWidth: .infinity)
                         .frame(height: mascotSize(for: proxy.size.height))
-                        .animation(.easeInOut(duration: 0.9), value: mascotState)
 
                         VStack(spacing: 14) {
                             heroAction(
@@ -66,13 +68,14 @@ struct HomeView: View {
         }
         .task(id: isVisible) {
             guard isVisible else { return }
+            mascotState = .idle
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(Double.random(in: 6...10)))
+                try? await Task.sleep(for: .seconds(Double.random(in: 7...11)))
+                guard !Task.isCancelled, isVisible else { break }
+                mascotState = .waving
+                try? await Task.sleep(for: .seconds(2.2))
                 guard !Task.isCancelled else { break }
-                withAnimation(.easeInOut(duration: 0.9)) { mascotState = .waving }
-                try? await Task.sleep(for: .seconds(2.8))
-                guard !Task.isCancelled else { break }
-                withAnimation(.easeInOut(duration: 0.9)) { mascotState = .idle }
+                mascotState = .idle
             }
         }
     }
@@ -121,8 +124,12 @@ struct HomeView: View {
         let fg: Color = color == WhistleTheme.charcoal || color == WhistleTheme.orange ? .white : WhistleTheme.charcoal
 
         return HStack(spacing: 7) {
-            Text(cookbook.emoji)
-                .font(.system(size: 16))
+            if cookbook.isIdly {
+                IdlyPiecesIcon(size: 24)
+            } else {
+                Text(cookbook.emoji)
+                    .font(.system(size: 16))
+            }
             VStack(alignment: .leading, spacing: 1) {
                 Text(cookbook.name)
                     .font(.fredoka(13, weight: .bold))

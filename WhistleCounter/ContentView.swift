@@ -44,6 +44,9 @@ struct ContentView: View {
                     onStartTimer: { activeFlow = .timer(nil) },
                     onOpenCookbook: open
                 )
+                .navigationDestination(item: $activeFlow) { flow in
+                    flowDestination(flow, settings: settings)
+                }
             }
             .tag(AppTab.home)
             .tabItem { Label(AppTab.home.title, systemImage: activeTab == .home ? AppTab.home.selectedIcon : AppTab.home.icon) }
@@ -51,6 +54,9 @@ struct ContentView: View {
             NavigationStack {
                 CookbooksView(settings: settings) { cookbook in
                     open(cookbook)
+                }
+                .navigationDestination(item: $activeFlow) { flow in
+                    flowDestination(flow, settings: settings)
                 }
             }
             .tag(AppTab.cookbooks)
@@ -70,36 +76,47 @@ struct ContentView: View {
                         activeFlow = .timer(cookbook)
                     }
                 }
+                .navigationDestination(item: $activeFlow) { flow in
+                    flowDestination(flow, settings: settings)
+                }
             }
             .tag(AppTab.history)
             .tabItem { Label(AppTab.history.title, systemImage: activeTab == .history ? AppTab.history.selectedIcon : AppTab.history.icon) }
 
             NavigationStack {
                 SettingsView(settings: settings)
+                    .navigationDestination(item: $activeFlow) { flow in
+                        flowDestination(flow, settings: settings)
+                    }
             }
             .tag(AppTab.settings)
             .tabItem { Label(AppTab.settings.title, systemImage: activeTab == .settings ? AppTab.settings.selectedIcon : AppTab.settings.icon) }
         }
-        .tint(Color(red: 1.0, green: 0.75, blue: 0.0))
         .toolbarBackground(.visible, for: .tabBar)
         .toolbarBackground(.ultraThinMaterial, for: .tabBar)
         .onChange(of: activeTab) { _, _ in
             HapticManager.selection(enabled: settings.hapticsEnabled)
         }
-        .fullScreenCover(item: $activeFlow) { flow in
-            switch flow {
-            case .whistles(let cookbook):
-                WhistleCounterView(
-                    settings: settings,
-                    cookbook: cookbook,
-                    onClose: { activeFlow = nil },
-                    onStartLinkedTimer: { linkedCookbook in activeFlow = .timer(linkedCookbook) }
-                )
-            case .timer(let cookbook):
-                TimerView(settings: settings, cookbook: cookbook) {
-                    activeFlow = nil
-                }
+    }
+
+    @ViewBuilder
+    private func flowDestination(_ flow: ActiveFlow, settings: AppSettings) -> some View {
+        switch flow {
+        case .whistles(let cookbook):
+            WhistleCounterView(
+                settings: settings,
+                cookbook: cookbook,
+                onClose: { activeFlow = nil },
+                onStartLinkedTimer: { linkedCookbook in activeFlow = .timer(linkedCookbook) }
+            )
+            .toolbar(.hidden, for: .navigationBar)
+            .toolbar(.hidden, for: .tabBar)
+        case .timer(let cookbook):
+            TimerView(settings: settings, cookbook: cookbook) {
+                activeFlow = nil
             }
+            .toolbar(.hidden, for: .navigationBar)
+            .toolbar(.hidden, for: .tabBar)
         }
     }
 
@@ -119,7 +136,7 @@ struct ContentView: View {
     }
 }
 
-enum ActiveFlow: Identifiable {
+enum ActiveFlow: Identifiable, Hashable {
     case whistles(Cookbook?)
     case timer(Cookbook?)
 
@@ -130,6 +147,14 @@ enum ActiveFlow: Identifiable {
         case .timer(let cookbook):
             "timer-\(cookbook?.id.uuidString ?? "quick")"
         }
+    }
+
+    static func == (lhs: ActiveFlow, rhs: ActiveFlow) -> Bool {
+        lhs.id == rhs.id
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
     }
 }
 

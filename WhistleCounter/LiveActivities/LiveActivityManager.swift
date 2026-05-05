@@ -101,11 +101,11 @@ final class LiveActivityManager {
 
     private func start(mode: CookingActivityAttributes.Mode, state: CookingActivityAttributes.ContentState, staleDate: Date? = nil) {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
-        end(finalStatus: "Ended", dismissalDelay: 1)
 
         let attributes = CookingActivityAttributes(id: UUID(), mode: mode)
         let content = ActivityContent(state: state, staleDate: staleDate)
         Task { @MainActor in
+            await endAllExistingActivities(finalStatus: "Ended")
             do {
                 currentActivity = try Activity<CookingActivityAttributes>.request(
                     attributes: attributes,
@@ -123,6 +123,17 @@ final class LiveActivityManager {
         let content = ActivityContent(state: state, staleDate: staleDate)
         Task { @MainActor in
             await activity.update(content)
+        }
+    }
+
+    private func endAllExistingActivities(finalStatus: String) async {
+        currentActivity = nil
+        for activity in Activity<CookingActivityAttributes>.activities {
+            var state = activity.content.state
+            state.isFinished = true
+            state.status = finalStatus
+            let content = ActivityContent(state: state, staleDate: Date())
+            await activity.end(content, dismissalPolicy: .immediate)
         }
     }
 }

@@ -91,8 +91,7 @@ struct WhistleCounterView: View {
                         .ignoresSafeArea()
                 }
 
-                // Left-edge swipe-back gesture (mirrors iOS navigation back swipe)
-                edgeSwipeDismiss
+                edgeSwipeBack
             }
         }
         .onChange(of: vm.showReadyPopup) { _, showing in
@@ -116,10 +115,10 @@ struct WhistleCounterView: View {
         }
     }
 
-    private var edgeSwipeDismiss: some View {
+    private var edgeSwipeBack: some View {
         HStack {
             Color.clear
-                .frame(width: 22)
+                .frame(width: 28)
                 .contentShape(Rectangle())
                 .gesture(
                     DragGesture(minimumDistance: 15, coordinateSpace: .global)
