@@ -57,14 +57,18 @@ struct WhistleCounterView: View {
                         ChunkyButton(
                             title: listeningButtonTitle,
                             systemImage: listeningButtonIcon,
-                            color: audioPlayer.isAlarmPlaying || vm.detector.isListening || vm.detector.isStarting ? WhistleTheme.orange : WhistleTheme.charcoal,
+                            color: listeningButtonColor,
                             fontSize: 17,
                             fullWidth: true,
-                            activeGlow: vm.detector.isListening && !audioPlayer.isAlarmPlaying
+                            activeGlow: vm.detector.isListening && !audioPlayer.isAlarmPlaying,
+                            minTitleWidth: 132,
+                            iconWidth: 20
                         ) {
                             HapticManager.tap(enabled: settings.hapticsEnabled)
                             if audioPlayer.isAlarmPlaying {
                                 AudioPlayer.shared.stopAlarm()
+                            } else if vm.count >= vm.target {
+                                return
                             } else {
                                 vm.toggleListening(sensitivity: sensitivity)
                             }
@@ -198,6 +202,9 @@ struct WhistleCounterView: View {
         if audioPlayer.isAlarmPlaying {
             return "Stop Sound"
         }
+        if vm.count >= vm.target {
+            return "All Set"
+        }
         if vm.detector.isListening {
             return "Stop Listening"
         }
@@ -211,6 +218,9 @@ struct WhistleCounterView: View {
         if audioPlayer.isAlarmPlaying {
             return "speaker.slash.fill"
         }
+        if vm.count >= vm.target {
+            return "checkmark.circle.fill"
+        }
         if vm.detector.isListening {
             return "stop.fill"
         }
@@ -218,6 +228,16 @@ struct WhistleCounterView: View {
             return "waveform"
         }
         return "mic.fill"
+    }
+
+    private var listeningButtonColor: Color {
+        if audioPlayer.isAlarmPlaying || vm.detector.isListening || vm.detector.isStarting {
+            return WhistleTheme.orange
+        }
+        if vm.count >= vm.target {
+            return WhistleTheme.mint
+        }
+        return WhistleTheme.charcoal
     }
 
     private func saveSetup() {

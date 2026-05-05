@@ -108,6 +108,8 @@ struct ChunkyButton: View {
     var cornerRadius: CGFloat = 24
     var fullWidth = false
     var activeGlow = false
+    var minTitleWidth: CGFloat? = nil
+    var iconWidth: CGFloat? = nil
     var action: () -> Void
 
     @State private var pressed = false
@@ -126,11 +128,14 @@ struct ChunkyButton: View {
             HStack(spacing: 8) {
                 if let systemImage {
                     Image(systemName: systemImage)
+                        .frame(width: iconWidth)
                 }
                 if let emoji {
                     Text(emoji)
+                        .frame(width: iconWidth)
                 }
                 Text(title)
+                    .frame(minWidth: minTitleWidth)
             }
             .font(.fredoka(fontSize, weight: .bold))
             .foregroundStyle(color == WhistleTheme.sunny || color == WhistleTheme.mint ? WhistleTheme.charcoal : .white)
