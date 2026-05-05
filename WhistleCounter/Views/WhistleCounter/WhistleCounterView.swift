@@ -89,6 +89,9 @@ struct WhistleCounterView: View {
                     ConfettiView()
                         .ignoresSafeArea()
                 }
+
+                // Left-edge swipe-back gesture (mirrors iOS navigation back swipe)
+                edgeSwipeDismiss
             }
         }
         .onChange(of: vm.showReadyPopup) { _, showing in
@@ -110,6 +113,27 @@ struct WhistleCounterView: View {
             AudioPlayer.shared.stopAlarm()
             vm.stopListening()
         }
+    }
+
+    private var edgeSwipeDismiss: some View {
+        HStack {
+            Color.clear
+                .frame(width: 22)
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 15, coordinateSpace: .global)
+                        .onEnded { value in
+                            let isRightward = value.translation.width > 60
+                            let isHorizontal = abs(value.translation.width) > abs(value.translation.height) * 1.5
+                            if isRightward && isHorizontal {
+                                onClose()
+                            }
+                        }
+                )
+            Spacer()
+        }
+        .ignoresSafeArea()
+        .zIndex(99)
     }
 
     private var targetBinding: Binding<Int> {

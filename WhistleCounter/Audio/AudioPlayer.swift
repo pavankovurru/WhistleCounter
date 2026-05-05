@@ -9,47 +9,12 @@ final class AudioPlayer: ObservableObject {
 
     @Published private(set) var isAlarmPlaying = false
 
-    private var backgroundPlayer: AVAudioPlayer?
-    private var backgroundEngine: AVAudioEngine?
-    private var backgroundNode: AVAudioPlayerNode?
-    private var backgroundBuffer: AVAudioPCMBuffer?
     private var alarmPlayer: AVAudioPlayer?
     private var alarmEngine: AVAudioEngine?
     private var alarmNode: AVAudioPlayerNode?
     private var alarmBuffer: AVAudioPCMBuffer?
     private var alarmStopTask: Task<Void, Never>?
 
-    func startBackgroundMusic(enabled: Bool) {
-        guard enabled else {
-            stopBackgroundMusic()
-            return
-        }
-        configureSession(playAndRecord: false)
-        guard let url = Bundle.main.url(forResource: "background_music", withExtension: "mp3") else {
-            startProceduralBackgroundMusic()
-            return
-        }
-        do {
-            stopProceduralBackgroundMusic()
-            backgroundPlayer = try AVAudioPlayer(contentsOf: url)
-            backgroundPlayer?.numberOfLoops = -1
-            backgroundPlayer?.volume = 0
-            backgroundPlayer?.play()
-            backgroundPlayer?.setVolume(0.32, fadeDuration: 1.2)
-        } catch {
-            backgroundPlayer = nil
-            startProceduralBackgroundMusic()
-        }
-    }
-
-    func stopBackgroundMusic() {
-        backgroundPlayer?.setVolume(0, fadeDuration: 0.5)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) { [weak self] in
-            self?.backgroundPlayer?.stop()
-            self?.backgroundPlayer = nil
-        }
-        stopProceduralBackgroundMusic()
-    }
 
     func playWhistle() {
         playResource(name: "whistle_boing", fallback: 1104)
@@ -60,14 +25,15 @@ final class AudioPlayer: ObservableObject {
     }
 
     func playAlarm(pack: SoundPack) {
-        configureAlarmSession()
-        stopAlarm()
+        stopAlarm()            // stop & clear the old player first
+        configureAlarmSession() // then set up a fresh session
         let resourceName = "alarm_\(pack.rawValue.lowercased())"
         if let url = Bundle.main.url(forResource: resourceName, withExtension: "mp3"),
            let player = try? AVAudioPlayer(contentsOf: url) {
             alarmPlayer = player
-            alarmPlayer?.numberOfLoops = 2
+            alarmPlayer?.numberOfLoops = 0  // play once
             alarmPlayer?.volume = 1
+            alarmPlayer?.prepareToPlay()
             alarmPlayer?.play()
             isAlarmPlaying = true
             alarmStopTask = Task { @MainActor in
@@ -102,107 +68,6 @@ final class AudioPlayer: ObservableObject {
         }
     }
 
-    private func configureSession(playAndRecord: Bool) {
-        #if os(iOS)
-        do {
-            let session = AVAudioSession.sharedInstance()
-            if playAndRecord {
-                try session.setCategory(.playAndRecord, mode: .default, options: [.mixWithOthers, .defaultToSpeaker])
-            } else {
-                try session.setCategory(.ambient, mode: .default, options: [.mixWithOthers])
-            }
-            try session.setActive(true)
-        } catch {
-            // Audio is additive polish; the core app remains usable if the session is unavailable.
-        }
-        #endif
-    }
-
-    private func startProceduralBackgroundMusic() {
-        guard backgroundNode?.isPlaying != true else { return }
-
-        let engine = AVAudioEngine()
-        let node = AVAudioPlayerNode()
-        let format = AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 2)
-        guard let format, let buffer = makeProceduralLoop(format: format) else { return }
-
-        engine.attach(node)
-        engine.connect(node, to: engine.mainMixerNode, format: format)
-        engine.mainMixerNode.outputVolume = 0.42
-
-        do {
-            try engine.start()
-            node.volume = 0.72
-            node.scheduleBuffer(buffer, at: nil, options: .loops)
-            node.play()
-            backgroundEngine = engine
-            backgroundNode = node
-            backgroundBuffer = buffer
-        } catch {
-            backgroundEngine = nil
-            backgroundNode = nil
-            backgroundBuffer = nil
-        }
-    }
-
-    private func stopProceduralBackgroundMusic() {
-        backgroundNode?.stop()
-        backgroundEngine?.stop()
-        backgroundEngine?.reset()
-        backgroundNode = nil
-        backgroundEngine = nil
-        backgroundBuffer = nil
-    }
-
-    private func makeProceduralLoop(format: AVAudioFormat) -> AVAudioPCMBuffer? {
-        let sampleRate = Float(format.sampleRate)
-        let duration: Float = 8
-        let frameCount = AVAudioFrameCount(sampleRate * duration)
-        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount),
-              let channels = buffer.floatChannelData else {
-            return nil
-        }
-
-        buffer.frameLength = frameCount
-        let chords: [[Float]] = [
-            [261.63, 329.63, 392.00],
-            [220.00, 329.63, 392.00],
-            [293.66, 349.23, 440.00],
-            [196.00, 246.94, 392.00]
-        ]
-        let twoPi = Float.pi * 2
-
-        for frame in 0..<Int(frameCount) {
-            let t = Float(frame) / sampleRate
-            let chordIndex = min(chords.count - 1, Int(t / 2) % chords.count)
-            let chord = chords[chordIndex]
-            let beatPulse = 0.78 + 0.22 * sin(twoPi * 0.5 * t)
-            let fadeIn = min(1, t / 0.18)
-            let fadeOut = min(1, (duration - t) / 0.18)
-            let fade = min(fadeIn, fadeOut)
-
-            var sample: Float = 0
-            for (index, frequency) in chord.enumerated() {
-                let detune: Float = index == 1 ? 1.004 : 1
-                let phase = twoPi * frequency * detune * t
-                let tone = sin(phase)
-                sample += tone * 0.024
-            }
-            let bassPhase = twoPi * (chord[0] / 2) * t
-            let sparklePhase = twoPi * 880 * t
-            let sparkleGate = max(Float(0), sin(twoPi * 0.25 * t))
-            sample += sin(bassPhase) * 0.030
-            sample += sin(sparklePhase) * 0.006 * sparkleGate
-            sample *= beatPulse * fade
-
-            channels[0][frame] = sample
-            if Int(format.channelCount) > 1 {
-                channels[1][frame] = sample * 0.92
-            }
-        }
-
-        return buffer
-    }
 
     private func startProceduralAlarm(pack: SoundPack) {
         guard let data = makeProceduralAlarmWAV(pack: pack),
@@ -211,7 +76,7 @@ final class AudioPlayer: ObservableObject {
             return
         }
 
-        player.numberOfLoops = 2
+        player.numberOfLoops = 0  // play once
         player.volume = pack == .zen ? 0.9 : 1
         player.prepareToPlay()
         alarmPlayer = player

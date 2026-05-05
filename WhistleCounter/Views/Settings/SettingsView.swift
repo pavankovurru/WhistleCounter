@@ -63,13 +63,6 @@ struct SettingsView: View {
         settingsSection(title: "Kitchen Feel", icon: "slider.horizontal.3", tint: WhistleTheme.mint) {
             VStack(spacing: 10) {
                 settingToggleRow(
-                    title: "Background music",
-                    subtitle: settings.backgroundMusicEnabled ? "Lo-fi cooking mood is on" : "Quiet kitchen mode",
-                    systemImage: "music.note",
-                    color: WhistleTheme.orange,
-                    isOn: $settings.backgroundMusicEnabled
-                )
-                settingToggleRow(
                     title: "Haptic feedback",
                     subtitle: settings.hapticsEnabled ? "Taps and wheels feel alive" : "No vibration feedback",
                     systemImage: "hand.tap.fill",

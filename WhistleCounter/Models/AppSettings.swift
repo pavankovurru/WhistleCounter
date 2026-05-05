@@ -5,7 +5,6 @@ import SwiftData
 final class AppSettings {
     var id: UUID
     var hasCompletedOnboarding: Bool
-    var backgroundMusicEnabled: Bool
     var hapticsEnabled: Bool
     var darkModeEnabled: Bool
     var soundPack: String
@@ -15,7 +14,6 @@ final class AppSettings {
     init(
         id: UUID = UUID(),
         hasCompletedOnboarding: Bool = false,
-        backgroundMusicEnabled: Bool = true,
         hapticsEnabled: Bool = true,
         darkModeEnabled: Bool = false,
         soundPack: String = SoundPack.classic.rawValue,
@@ -24,7 +22,6 @@ final class AppSettings {
     ) {
         self.id = id
         self.hasCompletedOnboarding = hasCompletedOnboarding
-        self.backgroundMusicEnabled = backgroundMusicEnabled
         self.hapticsEnabled = hapticsEnabled
         self.darkModeEnabled = darkModeEnabled
         self.soundPack = soundPack

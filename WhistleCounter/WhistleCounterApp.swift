@@ -7,9 +7,14 @@
 
 import SwiftUI
 import SwiftData
+import UIKit
 
 @main
 struct WhistleCounterApp: App {
+    init() {
+        // Set tab bar tint via UIKit so the glass material doesn't wash out the color
+        UITabBar.appearance().tintColor = UIColor(red: 1.0, green: 0.75, blue: 0.0, alpha: 1)
+    }
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             Cookbook.self,

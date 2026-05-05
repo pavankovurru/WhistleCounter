@@ -284,6 +284,13 @@ struct HistoryRow: View {
         .background {
             RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .fill(WhistleTheme.card(dark: dark))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .strokeBorder(
+                            dark ? Color.white.opacity(0.08) : Color.black.opacity(0.07),
+                            lineWidth: 1
+                        )
+                }
         }
     }
 
@@ -414,6 +421,5 @@ struct ShareableSessionCard: View {
                 .padding(8)
         }
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .shadow(color: WhistleTheme.orange.darkened(0.24).opacity(0.22), radius: 8, y: 4)
     }
 }

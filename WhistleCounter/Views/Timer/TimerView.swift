@@ -61,6 +61,9 @@ struct TimerView: View {
                     ConfettiView()
                         .ignoresSafeArea()
                 }
+
+                // Left-edge swipe-back gesture (mirrors iOS navigation back swipe)
+                edgeSwipeDismiss
             }
         }
         .onChange(of: vm.isDone) { _, isDone in
@@ -375,6 +378,27 @@ struct TimerView: View {
         let m = minutes ?? (total % 3600) / 60
         let s = seconds ?? total % 60
         vm.setDuration(TimeInterval(max(1, h * 3600 + m * 60 + s)))
+    }
+
+    private var edgeSwipeDismiss: some View {
+        HStack {
+            Color.clear
+                .frame(width: 22)
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 15, coordinateSpace: .global)
+                        .onEnded { value in
+                            let isRightward = value.translation.width > 60
+                            let isHorizontal = abs(value.translation.width) > abs(value.translation.height) * 1.5
+                            if isRightward && isHorizontal {
+                                onClose()
+                            }
+                        }
+                )
+            Spacer()
+        }
+        .ignoresSafeArea()
+        .zIndex(99)
     }
 
     private func saveTimer() {

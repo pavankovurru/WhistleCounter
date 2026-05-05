@@ -40,7 +40,8 @@ struct ContentView: View {
                 HomeView(
                     settings: settings,
                     onStartWhistles: { activeFlow = .whistles(nil) },
-                    onStartTimer: { activeFlow = .timer(nil) }
+                    onStartTimer: { activeFlow = .timer(nil) },
+                    onOpenCookbook: open
                 )
             }
             .tag(AppTab.home)
@@ -78,7 +79,7 @@ struct ContentView: View {
             .tag(AppTab.settings)
             .tabItem { Label(AppTab.settings.title, systemImage: activeTab == .settings ? AppTab.settings.selectedIcon : AppTab.settings.icon) }
         }
-        .tint(WhistleTheme.orange)
+        .tint(Color(red: 1.0, green: 0.75, blue: 0.0))
         .toolbarBackground(.visible, for: .tabBar)
         .toolbarBackground(.ultraThinMaterial, for: .tabBar)
         .onChange(of: activeTab) { _, _ in

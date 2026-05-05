@@ -661,19 +661,19 @@ enum AppTab: String, CaseIterable, Identifiable {
 
     var icon: String {
         switch self {
-        case .home: "house"
-        case .cookbooks: "book.closed"
-        case .history: "clock.arrow.circlepath"
-        case .settings: "gearshape"
+        case .home: "fork.knife"
+        case .cookbooks: "menucard"
+        case .history: "clock"
+        case .settings: "slider.horizontal.3"
         }
     }
 
     var selectedIcon: String {
         switch self {
-        case .home: "house.fill"
-        case .cookbooks: "book.closed.fill"
-        case .history: "clock.arrow.circlepath"
-        case .settings: "gearshape.fill"
+        case .home: "fork.knife.circle.fill"
+        case .cookbooks: "menucard.fill"
+        case .history: "clock.fill"
+        case .settings: "slider.horizontal.3"
         }
     }
 }

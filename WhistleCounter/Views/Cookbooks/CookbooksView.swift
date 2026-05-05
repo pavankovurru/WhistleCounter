@@ -289,7 +289,13 @@ struct CookbookCard: View {
         .background {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .fill(WhistleTheme.card(dark: dark))
-                .shadow(color: WhistleTheme.shadow(dark: dark), radius: 9, y: 4)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .strokeBorder(
+                            dark ? Color.white.opacity(0.08) : Color.black.opacity(0.07),
+                            lineWidth: 1
+                        )
+                }
         }
         .onLongPressGesture(minimumDuration: 0.45) {
             onLongPress()
@@ -527,7 +533,13 @@ struct CookbookEditorSheet: View {
         .background {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .fill(fill ?? WhistleTheme.card(dark: dark))
-                .shadow(color: WhistleTheme.shadow(dark: dark), radius: 7, y: 3)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .strokeBorder(
+                            dark ? Color.white.opacity(0.08) : Color.black.opacity(0.07),
+                            lineWidth: 1
+                        )
+                }
         }
     }
 

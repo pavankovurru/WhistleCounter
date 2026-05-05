@@ -1,11 +1,16 @@
+import SwiftData
 import SwiftUI
 
 struct HomeView: View {
     @Environment(\.colorScheme) private var colorScheme
+    @Query(sort: \Cookbook.createdAt, order: .reverse) private var cookbooks: [Cookbook]
 
     @Bindable var settings: AppSettings
     var onStartWhistles: () -> Void
     var onStartTimer: () -> Void
+    var onOpenCookbook: (Cookbook) -> Void
+
+    @State private var mascotState: WhistlyState = .idle
 
     private var dark: Bool { settings.darkModeEnabled || colorScheme == .dark }
 
@@ -18,14 +23,15 @@ struct HomeView: View {
                     header
                         .padding(.top, 8)
 
-                    VStack(spacing: 24) {
+                    VStack(spacing: 20) {
                         WhistlyMascot(
-                            state: .idle,
+                            state: mascotState,
                             theme: MascotTheme.resolved(from: settings.mascotTheme),
                             size: mascotSize(for: proxy.size.height)
                         )
-                            .frame(maxWidth: .infinity)
-                            .frame(height: mascotSize(for: proxy.size.height))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: mascotSize(for: proxy.size.height))
+                        .animation(.easeInOut(duration: 0.9), value: mascotState)
 
                         VStack(spacing: 14) {
                             heroAction(
@@ -42,6 +48,11 @@ struct HomeView: View {
                                 color: WhistleTheme.mint,
                                 action: onStartTimer
                             )
+
+                            if !recentCookbooks.isEmpty {
+                                recentSection
+                                    .padding(.top, 8)
+                            }
                         }
                         .frame(maxWidth: .infinity)
                     }
@@ -52,51 +63,98 @@ struct HomeView: View {
                 .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
             }
         }
-        .onAppear {
-            AudioPlayer.shared.startBackgroundMusic(enabled: settings.backgroundMusicEnabled)
-        }
-        .onChange(of: settings.backgroundMusicEnabled) { _, enabled in
-            enabled ? AudioPlayer.shared.startBackgroundMusic(enabled: true) : AudioPlayer.shared.stopBackgroundMusic()
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(Double.random(in: 6...10)))
+                withAnimation(.easeInOut(duration: 0.9)) { mascotState = .waving }
+                try? await Task.sleep(for: .seconds(2.8))
+                withAnimation(.easeInOut(duration: 0.9)) { mascotState = .idle }
+            }
         }
     }
 
     private var header: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Hey, Chef")
-                    .font(.nunito(13, weight: .black))
-                    .foregroundStyle(WhistleTheme.secondaryText(dark: dark))
-                    .textCase(.uppercase)
-                Text("What are we cooking?")
-                    .font(.fredoka(28, weight: .black))
-                    .foregroundStyle(WhistleTheme.text(dark: dark))
-            }
-            Spacer()
-            Button {
-                HapticManager.tap(enabled: settings.hapticsEnabled)
-                settings.backgroundMusicEnabled.toggle()
-            } label: {
-                Image(systemName: settings.backgroundMusicEnabled ? "music.note" : "speaker.slash.fill")
-                    .font(.system(size: 20, weight: .black))
-                    .foregroundStyle(WhistleTheme.charcoal)
-                    .frame(width: 50, height: 50)
-                    .background {
-                        let fill = settings.backgroundMusicEnabled ? WhistleTheme.sunny : WhistleTheme.card(dark: dark)
-                        ZStack {
-                            Circle()
-                                .fill(settings.backgroundMusicEnabled ? fill.darkened(0.42).opacity(0.68) : WhistleTheme.shadow(dark: dark))
-                                .offset(y: 3)
-                            Circle()
-                                .fill(fill)
+        VStack(alignment: .leading, spacing: 2) {
+            Text("Hey, Chef")
+                .font(.nunito(13, weight: .black))
+                .foregroundStyle(WhistleTheme.secondaryText(dark: dark))
+                .textCase(.uppercase)
+            Text("What are we cooking?")
+                .font(.fredoka(28, weight: .black))
+                .foregroundStyle(WhistleTheme.text(dark: dark))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var recentSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Recent cookbooks")
+                .font(.nunito(12, weight: .black))
+                .foregroundStyle(WhistleTheme.secondaryText(dark: dark))
+                .textCase(.uppercase)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(recentCookbooks.prefix(6)) { cookbook in
+                        Button {
+                            onOpenCookbook(cookbook)
+                        } label: {
+                            recentChip(cookbook)
                         }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 1)
+                .padding(.bottom, 4)  // room for the raised-shadow offset at chip bottom
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func recentChip(_ cookbook: Cookbook) -> some View {
+        let color = CookbookPalette.color(for: cookbook)
+        let stroke = CookbookPalette.strokeColor(for: cookbook)
+        let fg: Color = color == WhistleTheme.charcoal || color == WhistleTheme.orange ? .white : WhistleTheme.charcoal
+
+        return HStack(spacing: 7) {
+            Text(cookbook.emoji)
+                .font(.system(size: 16))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(cookbook.name)
+                    .font(.fredoka(13, weight: .bold))
+                    .foregroundStyle(fg)
+                    .lineLimit(1)
+                Text(cookbook.detailText)
+                    .font(.nunito(10, weight: .bold))
+                    .foregroundStyle(fg.opacity(0.72))
+                    .lineLimit(1)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background {
+            ZStack {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(color.darkened(0.38).opacity(0.62))
+                    .offset(y: 2)
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(color)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .strokeBorder(stroke, lineWidth: 1)
                     }
             }
-            .buttonStyle(.plain)
+        }
+    }
+
+    private var recentCookbooks: [Cookbook] {
+        cookbooks.sorted {
+            ($0.lastUsedAt ?? $0.createdAt) > ($1.lastUsedAt ?? $1.createdAt)
         }
     }
 
     private func mascotSize(for height: CGFloat) -> CGFloat {
-        min(202, max(168, height * 0.25))
+        min(186, max(148, height * 0.23))
     }
 
     private func heroAction(title: String, subtitle: String, icon: String, color: Color, action: @escaping () -> Void) -> some View {
