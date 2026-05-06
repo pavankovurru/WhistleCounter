@@ -108,7 +108,7 @@ struct ContentView: View {
     private func flowDestination(_ flow: ActiveFlow, settings: AppSettings) -> some View {
         switch flow {
         case .whistles(let cookbook):
-            WhistleCounterView(
+            WhistlyCounterView(
                 settings: settings,
                 cookbook: cookbook,
                 onClose: { activeFlow = nil },

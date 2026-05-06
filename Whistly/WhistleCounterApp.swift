@@ -1,6 +1,6 @@
 //
-//  WhistleCounterApp.swift
-//  WhistleCounter
+//  WhistlyApp.swift
+//  Whistly: Cooker Counter
 //
 //  Created by Pavan Kovurru on 5/4/26.
 //
@@ -10,7 +10,7 @@ import SwiftData
 import UIKit
 
 @main
-struct WhistleCounterApp: App {
+struct WhistlyApp: App {
     init() {
         configureSystemControlAppearance()
         configureTabBarAppearance()

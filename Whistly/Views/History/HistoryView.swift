@@ -402,7 +402,7 @@ struct ShareableSessionCard: View {
                 .font(.fredoka(22, weight: .black))
                 .foregroundStyle(.white)
                 .lineLimit(3)
-            ShareLink(item: "I cooked \(session.title) with WhistleCounter: \(session.summary).") {
+            ShareLink(item: "I cooked \(session.title) with Whistly: \(session.summary).") {
                 Label("Share", systemImage: "square.and.arrow.up")
                     .font(.fredoka(12, weight: .black))
                     .foregroundStyle(WhistleTheme.charcoal)

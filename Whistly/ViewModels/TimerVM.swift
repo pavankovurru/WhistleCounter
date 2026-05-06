@@ -70,7 +70,7 @@ final class TimerVM: ObservableObject {
         expectedEndDate = nil
         ticker?.invalidate()
         ticker = nil
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["WhistleCounterTimer"])
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["WhistlyTimer"])
         if endLiveActivity {
             LiveActivityManager.shared.endTimer(finalStatus: "Timer paused", dismissalDelay: 5)
         }
@@ -114,7 +114,7 @@ final class TimerVM: ObservableObject {
         expectedEndDate = nil
         ticker?.invalidate()
         ticker = nil
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["WhistleCounterTimer"])
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["WhistlyTimer"])
         isDone = true
         showDonePopup = true
         showConfetti = true
@@ -135,7 +135,7 @@ final class TimerVM: ObservableObject {
         content.body = "Something smells amazing!"
         content.sound = .defaultCritical
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: max(1, remaining), repeats: false)
-        let request = UNNotificationRequest(identifier: "WhistleCounterTimer", content: content, trigger: trigger)
+        let request = UNNotificationRequest(identifier: "WhistlyTimer", content: content, trigger: trigger)
         UNUserNotificationCenter.current().add(request)
     }
 

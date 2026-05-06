@@ -2,7 +2,7 @@ import Combine
 import Foundation
 
 @MainActor
-final class WhistleCounterVM: ObservableObject {
+final class WhistlyCounterVM: ObservableObject {
     @Published var target: Int
     @Published var count = 0
     @Published var showReadyPopup = false
@@ -124,7 +124,7 @@ final class WhistleCounterVM: ObservableObject {
         guard !hasLiveActivity, !isRequestingLiveActivity, detector.isListening, count < target else { return }
         wantsLiveActivity = true
         isRequestingLiveActivity = true
-        LiveActivityManager.shared.startWhistle(title: sourceCookbook?.name ?? "Whistle Counter", count: count, target: target) { [weak self] didStart in
+        LiveActivityManager.shared.startWhistle(title: sourceCookbook?.name ?? "Whistly", count: count, target: target) { [weak self] didStart in
             guard let self else { return }
             self.isRequestingLiveActivity = false
             let shouldKeepActivity = didStart && self.wantsLiveActivity && self.detector.isListening && self.count < self.target

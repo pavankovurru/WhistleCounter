@@ -17,6 +17,7 @@ struct WhistlyMascot: View {
     var showsSteamPuffs = true
     var isAnimated = true
     var keepsBodyPosition = true
+    var steamBaseY: CGFloat = 40
 
     @State private var motion = false
 
@@ -131,7 +132,7 @@ struct WhistlyMascot: View {
 
     @ViewBuilder
     private func hatOrSteam(_ u: CGFloat) -> some View {
-        SteamWhistleExact(u: u, colors: colors, state: state, showsSteamPuffs: showsSteamPuffs)
+        SteamWhistleExact(u: u, colors: colors, state: state, showsSteamPuffs: showsSteamPuffs, steamBaseY: steamBaseY)
     }
 
     @ViewBuilder
@@ -380,6 +381,7 @@ private struct SteamWhistleExact: View {
     var colors: WhistlyColors
     var state: WhistlyState
     var showsSteamPuffs: Bool
+    var steamBaseY: CGFloat = 40
     @State private var puff = false
 
     var body: some View {
@@ -418,15 +420,19 @@ private struct SteamWhistleExact: View {
                     SteamPuff(
                         u: u,
                         x: puffX(index) * u,
-                        baseY: 28 * u,
+                        baseY: steamBaseY * u,
                         phase: puff
                     )
-                    .animation(.easeOut(duration: 1.6).repeatForever(autoreverses: false).delay(Double(index) * 0.22), value: puff)
+                    .animation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true).delay(Double(index) * 0.4), value: puff)
                 }
             }
         }
         .frame(width: 200 * u, height: 200 * u, alignment: .topLeading)
         .onAppear { puff = true }
+        .onChange(of: showsSteamPuffs) { _, show in
+            puff = false
+            if show { puff = true }
+        }
     }
 
     private func puffX(_ index: Int) -> CGFloat {
@@ -455,7 +461,7 @@ private struct SteamPuff: View {
             .shadow(color: WhistleTheme.orange.opacity(0.12), radius: 6 * u, y: 2 * u)
             .scaleEffect(phase ? 1.42 : 0.42)
             .opacity(phase ? 0 : 0.92)
-            .position(x: x, y: phase ? baseY - 28 * u : baseY)
+            .position(x: x, y: phase ? baseY - 40 * u : baseY)
     }
 }
 

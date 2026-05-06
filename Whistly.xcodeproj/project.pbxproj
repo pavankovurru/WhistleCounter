@@ -7,8 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		CD0000142FA9000000000000 /* WhistleCounterLiveActivity.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = CD0000012FA9000000000000 /* WhistleCounterLiveActivity.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		CD0000152FA9000000000000 /* CookingActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD0000132FA9000000000000 /* CookingActivityAttributes.swift */; };
+		CD0000142FA9000000000000 /* WhistlyLiveActivity.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = CD0000012FA9000000000000 /* WhistlyLiveActivity.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		CD0000152FA9000000000000 /* WhistleCounter/LiveActivities/CookingActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD0000132FA9000000000000 /* WhistleCounter/LiveActivities/CookingActivityAttributes.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -17,7 +17,7 @@
 			containerPortal = CCA1C2402FA8CA6F008BF55B /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = CD0000062FA9000000000000;
-			remoteInfo = WhistleCounterLiveActivity;
+			remoteInfo = WhistlyLiveActivity;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -28,7 +28,7 @@
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
-				CD0000142FA9000000000000 /* WhistleCounterLiveActivity.appex in Embed App Extensions */,
+				CD0000142FA9000000000000 /* WhistlyLiveActivity.appex in Embed App Extensions */,
 			);
 			name = "Embed App Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -36,20 +36,20 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		CCA1C2482FA8CA6F008BF55B /* WhistleCounter.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WhistleCounter.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		CD0000012FA9000000000000 /* WhistleCounterLiveActivity.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = WhistleCounterLiveActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
-		CD0000132FA9000000000000 /* CookingActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhistleCounter/LiveActivities/CookingActivityAttributes.swift; sourceTree = "<group>"; };
+		CCA1C2482FA8CA6F008BF55B /* Whistly.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Whistly.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		CD0000012FA9000000000000 /* WhistlyLiveActivity.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = WhistlyLiveActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		CD0000132FA9000000000000 /* WhistleCounter/LiveActivities/CookingActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Whistly/LiveActivities/CookingActivityAttributes.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		CCA1C24A2FA8CA6F008BF55B /* WhistleCounter */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = WhistleCounter;
+			path = Whistly;
 			sourceTree = "<group>";
 		};
 		CD0000022FA9000000000000 /* WhistleCounterLiveActivity */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = WhistleCounterLiveActivity;
+			path = WhistlyLiveActivity;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -78,24 +78,33 @@
 				CCA1C24A2FA8CA6F008BF55B /* WhistleCounter */,
 				CD0000022FA9000000000000 /* WhistleCounterLiveActivity */,
 				CCA1C2492FA8CA6F008BF55B /* Products */,
+				CCACD4DB2FABE03600153EEC /* Recovered References */,
 			);
 			sourceTree = "<group>";
 		};
 		CCA1C2492FA8CA6F008BF55B /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				CCA1C2482FA8CA6F008BF55B /* WhistleCounter.app */,
-				CD0000012FA9000000000000 /* WhistleCounterLiveActivity.appex */,
+				CCA1C2482FA8CA6F008BF55B /* Whistly.app */,
+				CD0000012FA9000000000000 /* WhistlyLiveActivity.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		CCACD4DB2FABE03600153EEC /* Recovered References */ = {
+			isa = PBXGroup;
+			children = (
+				CD0000132FA9000000000000 /* WhistleCounter/LiveActivities/CookingActivityAttributes.swift */,
+			);
+			name = "Recovered References";
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		CCA1C2472FA8CA6F008BF55B /* WhistleCounter */ = {
+		CCA1C2472FA8CA6F008BF55B /* Whistly */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = CCA1C2552FA8CA71008BF55B /* Build configuration list for PBXNativeTarget "WhistleCounter" */;
+			buildConfigurationList = CCA1C2552FA8CA71008BF55B /* Build configuration list for PBXNativeTarget "Whistly" */;
 			buildPhases = (
 				CCA1C2442FA8CA6F008BF55B /* Sources */,
 				CCA1C2452FA8CA6F008BF55B /* Frameworks */,
@@ -110,16 +119,16 @@
 			fileSystemSynchronizedGroups = (
 				CCA1C24A2FA8CA6F008BF55B /* WhistleCounter */,
 			);
-			name = WhistleCounter;
+			name = Whistly;
 			packageProductDependencies = (
 			);
-			productName = WhistleCounter;
-			productReference = CCA1C2482FA8CA6F008BF55B /* WhistleCounter.app */;
+			productName = Whistly;
+			productReference = CCA1C2482FA8CA6F008BF55B /* Whistly.app */;
 			productType = "com.apple.product-type.application";
 		};
-		CD0000062FA9000000000000 /* WhistleCounterLiveActivity */ = {
+		CD0000062FA9000000000000 /* WhistlyLiveActivity */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = CD0000112FA9000000000000 /* Build configuration list for PBXNativeTarget "WhistleCounterLiveActivity" */;
+			buildConfigurationList = CD0000112FA9000000000000 /* Build configuration list for PBXNativeTarget "WhistlyLiveActivity" */;
 			buildPhases = (
 				CD0000032FA9000000000000 /* Sources */,
 				CD0000042FA9000000000000 /* Frameworks */,
@@ -132,11 +141,11 @@
 			fileSystemSynchronizedGroups = (
 				CD0000022FA9000000000000 /* WhistleCounterLiveActivity */,
 			);
-			name = WhistleCounterLiveActivity;
+			name = WhistlyLiveActivity;
 			packageProductDependencies = (
 			);
-			productName = WhistleCounterLiveActivity;
-			productReference = CD0000012FA9000000000000 /* WhistleCounterLiveActivity.appex */;
+			productName = WhistlyLiveActivity;
+			productReference = CD0000012FA9000000000000 /* WhistlyLiveActivity.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
@@ -171,8 +180,8 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				CCA1C2472FA8CA6F008BF55B /* WhistleCounter */,
-				CD0000062FA9000000000000 /* WhistleCounterLiveActivity */,
+				CCA1C2472FA8CA6F008BF55B /* Whistly */,
+				CD0000062FA9000000000000 /* WhistlyLiveActivity */,
 			);
 		};
 /* End PBXProject section */
@@ -206,7 +215,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				CD0000152FA9000000000000 /* CookingActivityAttributes.swift in Sources */,
+				CD0000152FA9000000000000 /* WhistleCounter/LiveActivities/CookingActivityAttributes.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -215,7 +224,7 @@
 /* Begin PBXTargetDependency section */
 		CD0000182FA9000000000000 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = CD0000062FA9000000000000 /* WhistleCounterLiveActivity */;
+			target = CD0000062FA9000000000000 /* WhistlyLiveActivity */;
 			targetProxy = CD0000162FA9000000000000 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -348,8 +357,8 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Config/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = WhistleCounter;
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "WhistleCounter listens for your cooker whistles so you never lose count!";
+				INFOPLIST_KEY_CFBundleDisplayName = Whistly;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Whistly listens for your cooker whistles so you never lose count!";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
@@ -363,8 +372,8 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.pavankovurru.WhistleCounter;
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pavankovurru.Whistly;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = iphoneos;
@@ -392,8 +401,8 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Config/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = WhistleCounter;
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "WhistleCounter listens for your cooker whistles so you never lose count!";
+				INFOPLIST_KEY_CFBundleDisplayName = Whistly;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Whistly listens for your cooker whistles so you never lose count!";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
@@ -407,8 +416,8 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.pavankovurru.WhistleCounter;
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pavankovurru.Whistly;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = iphoneos;
@@ -440,8 +449,8 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.pavankovurru.WhistleCounter.WhistleCounterLiveActivity;
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pavankovurru.Whistly.WhistlyLiveActivity;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
@@ -473,8 +482,8 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.pavankovurru.WhistleCounter.WhistleCounterLiveActivity;
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pavankovurru.Whistly.WhistlyLiveActivity;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
@@ -504,7 +513,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		CCA1C2552FA8CA71008BF55B /* Build configuration list for PBXNativeTarget "WhistleCounter" */ = {
+		CCA1C2552FA8CA71008BF55B /* Build configuration list for PBXNativeTarget "Whistly" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				CCA1C2562FA8CA71008BF55B /* Debug */,
@@ -513,7 +522,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		CD0000112FA9000000000000 /* Build configuration list for PBXNativeTarget "WhistleCounterLiveActivity" */ = {
+		CD0000112FA9000000000000 /* Build configuration list for PBXNativeTarget "WhistlyLiveActivity" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				CD0000092FA9000000000000 /* Debug */,

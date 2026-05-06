@@ -37,7 +37,7 @@ final class LiveActivityManager {
         update(
             .init(
                 mode: .whistle,
-                title: "Whistle Counter",
+                title: "Whistly",
                 status: status,
                 count: count,
                 target: target,

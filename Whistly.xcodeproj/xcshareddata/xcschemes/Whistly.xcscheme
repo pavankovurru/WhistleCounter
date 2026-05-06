@@ -16,9 +16,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "CCA1C2472FA8CA6F008BF55B"
-               BuildableName = "WhistleCounter.app"
-               BlueprintName = "WhistleCounter"
-               ReferencedContainer = "container:WhistleCounter.xcodeproj">
+               BuildableName = "Whistly.app"
+               BlueprintName = "Whistly"
+               ReferencedContainer = "container:Whistly.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -45,9 +45,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "CCA1C2472FA8CA6F008BF55B"
-            BuildableName = "WhistleCounter.app"
-            BlueprintName = "WhistleCounter"
-            ReferencedContainer = "container:WhistleCounter.xcodeproj">
+            BuildableName = "Whistly.app"
+            BlueprintName = "Whistly"
+            ReferencedContainer = "container:Whistly.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -62,9 +62,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "CCA1C2472FA8CA6F008BF55B"
-            BuildableName = "WhistleCounter.app"
-            BlueprintName = "WhistleCounter"
-            ReferencedContainer = "container:WhistleCounter.xcodeproj">
+            BuildableName = "Whistly.app"
+            BlueprintName = "Whistly"
+            ReferencedContainer = "container:Whistly.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

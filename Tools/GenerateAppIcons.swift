@@ -65,7 +65,7 @@ let navy = RGBA(hex: 0x1A1A2E)
 
 let variants: [(String, IconPalette)] = [
     (
-        "WhistleCounterIconLight.png",
+        "WhistlyIconLight.png",
         IconPalette(
             backgroundTop: RGBA(hex: 0xFFFDF8),
             backgroundBottom: cream,
@@ -77,7 +77,7 @@ let variants: [(String, IconPalette)] = [
         )
     ),
     (
-        "WhistleCounterIconDark.png",
+        "WhistlyIconDark.png",
         IconPalette(
             backgroundTop: RGBA(hex: 0x252542),
             backgroundBottom: navy,
@@ -89,7 +89,7 @@ let variants: [(String, IconPalette)] = [
         )
     ),
     (
-        "WhistleCounterIconTinted.png",
+        "WhistlyIconTinted.png",
         IconPalette(
             backgroundTop: RGBA(hex: 0xFFFDF8),
             backgroundBottom: cream,
@@ -102,7 +102,7 @@ let variants: [(String, IconPalette)] = [
     )
 ]
 
-let outputDir = URL(fileURLWithPath: "/Users/pavankovurru/WhistleCounter/WhistleCounter/Assets.xcassets/AppIcon.appiconset")
+let outputDir = URL(fileURLWithPath: "/Users/pavankovurru/Whistly/Whistly/Assets.xcassets/AppIcon.appiconset")
 let size = 1024
 let mascotScale: CGFloat = 4.36
 let mascotOrigin = CGPoint(x: (CGFloat(size) - 200 * mascotScale) / 2, y: 4)

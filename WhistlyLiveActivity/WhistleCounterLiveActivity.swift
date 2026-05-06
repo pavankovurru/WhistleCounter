@@ -2,7 +2,7 @@ import ActivityKit
 import WidgetKit
 import SwiftUI
 
-struct WhistleCounterLiveActivity: Widget {
+struct WhistlyLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: CookingActivityAttributes.self) { context in
             LockScreenActivityView(state: context.state)

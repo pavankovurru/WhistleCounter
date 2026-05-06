@@ -4,14 +4,14 @@
 <dict>
 	<key>SchemeUserState</key>
 	<dict>
-		<key>WhistleCounter.xcscheme_^#shared#^_</key>
+		<key>Whistly.xcscheme_^#shared#^_</key>
 		<dict>
 			<key>isShown</key>
 			<true/>
 			<key>orderHint</key>
 			<integer>0</integer>
 		</dict>
-		<key>WhistleCounterLiveActivity.xcscheme_^#shared#^_</key>
+		<key>WhistlyLiveActivity.xcscheme_^#shared#^_</key>
 		<dict>
 			<key>isShown</key>
 			<false/>

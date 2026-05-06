@@ -1,12 +1,12 @@
 import SwiftData
 import SwiftUI
 
-struct WhistleCounterView: View {
+struct WhistlyCounterView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.colorScheme) private var colorScheme
 
     @Bindable var settings: AppSettings
-    @StateObject private var vm: WhistleCounterVM
+    @StateObject private var vm: WhistlyCounterVM
     @State private var didLogCompletion = false
     @State private var didSaveCookbook = false
     @ObservedObject private var audioPlayer = AudioPlayer.shared
@@ -17,7 +17,7 @@ struct WhistleCounterView: View {
         self.settings = settings
         self.onClose = onClose
         self.onStartLinkedTimer = onStartLinkedTimer
-        _vm = StateObject(wrappedValue: WhistleCounterVM(cookbook: cookbook))
+        _vm = StateObject(wrappedValue: WhistlyCounterVM(cookbook: cookbook))
     }
 
     private var dark: Bool { settings.darkModeEnabled || colorScheme == .dark }
@@ -37,22 +37,32 @@ struct WhistleCounterView: View {
                     VStack(spacing: 20) {
                         SlotPickerView(title: "Target", value: targetBinding, range: 1...20, suffix: "whistles", tint: WhistleTheme.orange, haptics: settings.hapticsEnabled)
 
-                        HStack(alignment: .firstTextBaseline, spacing: 4) {
-                            Text("\(vm.count)")
-                                .font(.fredoka(156, weight: .black))
-                                .foregroundStyle(WhistleTheme.text(dark: dark))
-                                .contentTransition(.numericText())
-                                .minimumScaleFactor(0.72)
-                            Text("/\(vm.target)")
-                                .font(.fredoka(48, weight: .black))
-                                .foregroundStyle(WhistleTheme.secondaryText(dark: dark))
+                        VStack(spacing: 4) {
+                            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                                Text("\(vm.count)")
+                                    .font(.fredoka(156, weight: .black))
+                                    .foregroundStyle(WhistleTheme.text(dark: dark))
+                                    .contentTransition(.numericText())
+                                    .minimumScaleFactor(0.72)
+                                Text("/\(vm.target)")
+                                    .font(.fredoka(48, weight: .black))
+                                    .foregroundStyle(WhistleTheme.secondaryText(dark: dark))
+                            }
+                            .animation(.spring(response: 0.28, dampingFraction: 0.52), value: vm.count)
+
+                            WhistleMilestoneLabel(text: vm.milestone)
                         }
-                        .animation(.spring(response: 0.28, dampingFraction: 0.52), value: vm.count)
 
-                        WhistleMilestoneLabel(text: vm.milestone)
-
-                        WhistlyMascot(state: vm.mascotState, theme: MascotTheme.resolved(from: settings.mascotTheme), size: 174)
-                            .frame(height: 170)
+                        WhistlyMascot(
+                            state: vm.mascotState,
+                            theme: MascotTheme.resolved(from: settings.mascotTheme),
+                            size: 174,
+                            showsSteamPuffs: true,
+                            isAnimated: true,
+                            keepsBodyPosition: true,
+                            steamBaseY: 58
+                        )
+                        .frame(height: 174)
 
                         ChunkyButton(
                             title: listeningButtonTitle,
@@ -149,7 +159,7 @@ struct WhistleCounterView: View {
 
     private var header: some View {
         FlowNavigationBar(
-            title: "Whistle Counter",
+            title: "Count Whistles",
             dark: dark,
             haptics: settings.hapticsEnabled,
             onBack: closeScreen,
