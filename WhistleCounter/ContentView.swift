@@ -35,67 +35,72 @@ struct ContentView: View {
 
     @ViewBuilder
     private func mainTabs(settings: AppSettings) -> some View {
-        TabView(selection: $activeTab) {
-            NavigationStack {
-                HomeView(
-                    settings: settings,
-                    isVisible: activeTab == .home,
-                    onStartWhistles: { activeFlow = .whistles(nil) },
-                    onStartTimer: { activeFlow = .timer(nil) },
-                    onOpenCookbook: open
-                )
-                .navigationDestination(item: $activeFlow) { flow in
-                    flowDestination(flow, settings: settings)
-                }
-            }
-            .tag(AppTab.home)
-            .tabItem { Label(AppTab.home.title, systemImage: activeTab == .home ? AppTab.home.selectedIcon : AppTab.home.icon) }
-
-            NavigationStack {
-                CookbooksView(settings: settings) { cookbook in
-                    open(cookbook)
-                }
-                .navigationDestination(item: $activeFlow) { flow in
-                    flowDestination(flow, settings: settings)
-                }
-            }
-            .tag(AppTab.cookbooks)
-            .tabItem { Label(AppTab.cookbooks.title, systemImage: activeTab == .cookbooks ? AppTab.cookbooks.selectedIcon : AppTab.cookbooks.icon) }
-
-            NavigationStack {
-                HistoryView(settings: settings) { session in
-                    let cookbook = Cookbook(
-                        name: session.title,
-                        whistleTarget: session.targetWhistles ?? (session.whistleCount > 0 ? session.whistleCount : nil),
-                        timerDuration: session.timerDuration,
-                        emoji: session.emoji
+        let dark = settings.darkModeEnabled || colorScheme == .dark
+        ZStack(alignment: .bottom) {
+            TabView(selection: $activeTab) {
+                NavigationStack {
+                    HomeView(
+                        settings: settings,
+                        isVisible: activeTab == .home,
+                        onStartWhistles: { activeFlow = .whistles(nil) },
+                        onStartTimer: { activeFlow = .timer(nil) },
+                        onOpenCookbook: open
                     )
-                    if cookbook.whistleTarget != nil {
-                        activeFlow = .whistles(cookbook)
-                    } else {
-                        activeFlow = .timer(cookbook)
-                    }
-                }
-                .navigationDestination(item: $activeFlow) { flow in
-                    flowDestination(flow, settings: settings)
-                }
-            }
-            .tag(AppTab.history)
-            .tabItem { Label(AppTab.history.title, systemImage: activeTab == .history ? AppTab.history.selectedIcon : AppTab.history.icon) }
-
-            NavigationStack {
-                SettingsView(settings: settings)
+                    .toolbar(.hidden, for: .tabBar)
                     .navigationDestination(item: $activeFlow) { flow in
                         flowDestination(flow, settings: settings)
                     }
+                }
+                .tag(AppTab.home)
+
+                NavigationStack {
+                    CookbooksView(settings: settings) { cookbook in
+                        open(cookbook)
+                    }
+                    .toolbar(.hidden, for: .tabBar)
+                    .navigationDestination(item: $activeFlow) { flow in
+                        flowDestination(flow, settings: settings)
+                    }
+                }
+                .tag(AppTab.cookbooks)
+
+                NavigationStack {
+                    HistoryView(settings: settings) { session in
+                        let cookbook = Cookbook(
+                            name: session.title,
+                            whistleTarget: session.targetWhistles ?? (session.whistleCount > 0 ? session.whistleCount : nil),
+                            timerDuration: session.timerDuration,
+                            emoji: session.emoji
+                        )
+                        if cookbook.whistleTarget != nil {
+                            activeFlow = .whistles(cookbook)
+                        } else {
+                            activeFlow = .timer(cookbook)
+                        }
+                    }
+                    .toolbar(.hidden, for: .tabBar)
+                    .navigationDestination(item: $activeFlow) { flow in
+                        flowDestination(flow, settings: settings)
+                    }
+                }
+                .tag(AppTab.history)
+
+                NavigationStack {
+                    SettingsView(settings: settings)
+                        .toolbar(.hidden, for: .tabBar)
+                        .navigationDestination(item: $activeFlow) { flow in
+                            flowDestination(flow, settings: settings)
+                        }
+                }
+                .tag(AppTab.settings)
             }
-            .tag(AppTab.settings)
-            .tabItem { Label(AppTab.settings.title, systemImage: activeTab == .settings ? AppTab.settings.selectedIcon : AppTab.settings.icon) }
-        }
-        .toolbarBackground(.visible, for: .tabBar)
-        .toolbarBackground(.ultraThinMaterial, for: .tabBar)
-        .onChange(of: activeTab) { _, _ in
-            HapticManager.selection(enabled: settings.hapticsEnabled)
+            .onChange(of: activeTab) { _, _ in
+                HapticManager.selection(enabled: settings.hapticsEnabled)
+            }
+
+            if activeFlow == nil {
+                BottomTabBar(activeTab: $activeTab, dark: dark, haptics: settings.hapticsEnabled)
+            }
         }
     }
 

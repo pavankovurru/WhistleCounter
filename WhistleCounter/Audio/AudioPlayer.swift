@@ -8,6 +8,7 @@ final class AudioPlayer: ObservableObject {
     static let shared = AudioPlayer()
 
     @Published private(set) var isAlarmPlaying = false
+    @Published private(set) var previewingPack: SoundPack? = nil
 
     private var alarmPlayer: AVAudioPlayer?
     private var alarmEngine: AVAudioEngine?
@@ -16,6 +17,7 @@ final class AudioPlayer: ObservableObject {
     private var alarmStopTask: Task<Void, Never>?
     private var previewPlayer: AVAudioPlayer?
     private var previewStopTask: Task<Void, Never>?
+    private var isPreviewSessionConfigured = false
 
 
     func playWhistle() {
@@ -50,7 +52,13 @@ final class AudioPlayer: ObservableObject {
 
     func previewAlarm(pack: SoundPack, duration: TimeInterval = 2) {
         stopAlarmPreview()
-        configureAlarmSession()
+        // Configure the session only once — calling setCategory/setActive on every tap
+        // interrupts the audio hardware and causes play() to silently fail.
+        if !isPreviewSessionConfigured {
+            configureAlarmSession()
+            isPreviewSessionConfigured = true
+        }
+        previewingPack = pack
         let resourceName = "alarm_\(pack.rawValue.lowercased())"
         if let url = Bundle.main.url(forResource: resourceName, withExtension: "mp3"),
            let player = try? AVAudioPlayer(contentsOf: url) {
@@ -77,6 +85,7 @@ final class AudioPlayer: ObservableObject {
                 stopAlarmPreview()
             }
         } else {
+            previewingPack = nil
             AudioServicesPlaySystemSound(1005)
         }
     }
@@ -93,6 +102,7 @@ final class AudioPlayer: ObservableObject {
         alarmEngine = nil
         alarmBuffer = nil
         isAlarmPlaying = false
+        isPreviewSessionConfigured = false
     }
 
     func stopAlarmPreview() {
@@ -100,6 +110,7 @@ final class AudioPlayer: ObservableObject {
         previewStopTask = nil
         previewPlayer?.stop()
         previewPlayer = nil
+        previewingPack = nil
     }
 
     private func playResource(name: String, fallback: SystemSoundID) {

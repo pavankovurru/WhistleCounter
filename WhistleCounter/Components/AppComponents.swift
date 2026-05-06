@@ -461,7 +461,7 @@ struct BottomTabBar: View {
                             }
                         } label: {
                             VStack(spacing: 3) {
-                                Image(systemName: tab.icon)
+                                Image(systemName: activeTab == tab ? tab.selectedIcon : tab.icon)
                                     .font(.system(size: 18, weight: .bold))
                                 Text(tab.title)
                                     .font(.fredoka(10, weight: .black))
@@ -469,7 +469,17 @@ struct BottomTabBar: View {
                             .foregroundStyle(activeTab == tab ? WhistleTheme.charcoal : WhistleTheme.secondaryText(dark: dark))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 8)
-                            .background(activeTab == tab ? WhistleTheme.sunny : .clear, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                            .background {
+                                if activeTab == tab {
+                                    ZStack {
+                                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                                            .fill(WhistleTheme.sunny.darkened(0.38).opacity(0.62))
+                                            .offset(y: 2.5)
+                                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                                            .fill(WhistleTheme.sunny)
+                                    }
+                                }
+                            }
                         }
                         .buttonStyle(.plain)
                     }

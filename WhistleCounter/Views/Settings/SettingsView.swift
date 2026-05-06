@@ -4,6 +4,7 @@ struct SettingsView: View {
     @Environment(\.colorScheme) private var colorScheme
 
     @Bindable var settings: AppSettings
+    @ObservedObject private var audioPlayer = AudioPlayer.shared
 
     private var dark: Bool { settings.darkModeEnabled || colorScheme == .dark }
 
@@ -258,16 +259,26 @@ struct SettingsView: View {
 
     private func packButton(_ pack: SoundPack) -> some View {
         let active = settings.soundPack == pack.rawValue
+        let isPreviewing = audioPlayer.previewingPack == pack
+        let anotherPreviewing = audioPlayer.previewingPack != nil && !isPreviewing
+
         return Button {
+            guard !isPreviewing else { return }
             HapticManager.tap(enabled: settings.hapticsEnabled)
             withAnimation(.spring(response: 0.28, dampingFraction: 0.68)) {
                 settings.soundPack = pack.rawValue
             }
-            AudioPlayer.shared.previewAlarm(pack: pack, duration: 2)
+            AudioPlayer.shared.previewAlarm(pack: pack, duration: 3)
         } label: {
             VStack(spacing: 6) {
-                Text(pack.emoji)
-                    .font(.title2)
+                if isPreviewing {
+                    Image(systemName: "speaker.wave.2.fill")
+                        .font(.title2)
+                        .symbolEffect(.variableColor.iterative.reversing)
+                } else {
+                    Text(pack.emoji)
+                        .font(.title2)
+                }
                 Text(pack.rawValue)
                     .font(.fredoka(13, weight: .black))
                     .lineLimit(1)
@@ -276,6 +287,7 @@ struct SettingsView: View {
             .foregroundStyle(packColor(pack) == WhistleTheme.charcoal ? .white : WhistleTheme.charcoal)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)
+            .opacity(anotherPreviewing ? 0.4 : 1)
             .background {
                 let fill = active ? packColor(pack) : WhistleTheme.background(dark: dark)
                 ZStack {
@@ -288,6 +300,8 @@ struct SettingsView: View {
             }
         }
         .buttonStyle(.plain)
+        .disabled(anotherPreviewing)
+        .animation(.easeInOut(duration: 0.2), value: audioPlayer.previewingPack)
     }
 
     private func sensitivityButton(_ level: WhistleSensitivity) -> some View {
