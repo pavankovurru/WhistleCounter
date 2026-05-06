@@ -32,14 +32,14 @@ struct WhistleCounterView: View {
                 VStack(spacing: 0) {
                     header
 
-                    Spacer()
+                    Spacer().frame(maxHeight: 32)
 
                     VStack(spacing: 20) {
                         SlotPickerView(title: "Target", value: targetBinding, range: 1...20, suffix: "whistles", tint: WhistleTheme.orange, haptics: settings.hapticsEnabled)
 
                         HStack(alignment: .firstTextBaseline, spacing: 4) {
                             Text("\(vm.count)")
-                                .font(.fredoka(128, weight: .black))
+                                .font(.fredoka(156, weight: .black))
                                 .foregroundStyle(WhistleTheme.text(dark: dark))
                                 .contentTransition(.numericText())
                                 .minimumScaleFactor(0.72)

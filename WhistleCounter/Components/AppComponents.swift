@@ -43,7 +43,7 @@ struct FlowNavigationBar: View {
 
             Text(title)
                 .font(.fredoka(19, weight: .black))
-                .foregroundStyle(WhistleTheme.charcoal)
+                .foregroundStyle(.white)
                 .lineLimit(1)
                 .minimumScaleFactor(0.78)
                 .padding(.horizontal, 18)
@@ -51,10 +51,10 @@ struct FlowNavigationBar: View {
                 .background {
                     ZStack {
                         Capsule()
-                            .fill(navTitleFill.darkened(0.40).opacity(dark ? 0.58 : 0.62))
+                            .fill(WhistleTheme.charcoal.darkened(0.42).opacity(dark ? 0.70 : 0.60))
                             .offset(y: 2.5)
                         Capsule()
-                            .fill(navTitleFill)
+                            .fill(WhistleTheme.charcoal)
                     }
                 }
         }
@@ -91,9 +91,6 @@ struct FlowNavigationBar: View {
         WhistleTheme.sunny
     }
 
-    private var navTitleFill: Color {
-        dark ? WhistleTheme.amber.lightened(0.10) : WhistleTheme.cream.darkened(0.04)
-    }
 }
 
 struct ChunkyButton: View {

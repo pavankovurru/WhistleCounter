@@ -284,7 +284,9 @@ struct SettingsView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.82)
             }
-            .foregroundStyle(packColor(pack) == WhistleTheme.charcoal ? .white : WhistleTheme.charcoal)
+            .foregroundStyle(active
+                ? (packColor(pack) == WhistleTheme.charcoal ? .white : WhistleTheme.charcoal)
+                : WhistleTheme.secondaryText(dark: dark))
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)
             .opacity(anotherPreviewing ? 0.4 : 1)
@@ -356,7 +358,9 @@ struct SettingsView: View {
                     .font(.fredoka(11, weight: .black))
                     .lineLimit(1)
             }
-            .foregroundStyle(themeFill(theme) == WhistleTheme.charcoal ? .white : WhistleTheme.charcoal)
+            .foregroundStyle(active
+                ? (themeFill(theme) == WhistleTheme.charcoal ? .white : WhistleTheme.charcoal)
+                : WhistleTheme.secondaryText(dark: dark))
             .frame(maxWidth: .infinity)
             .padding(.vertical, 9)
             .background {

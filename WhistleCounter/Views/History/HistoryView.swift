@@ -221,20 +221,40 @@ struct HistoryRow: View {
             rowContent
                 .offset(x: horizontalOffset)
                 .gesture(swipeGesture)
-                .onTapGesture {
-                    if horizontalOffset < 0 {
-                        withAnimation(.spring(response: 0.28, dampingFraction: 0.78)) {
-                            horizontalOffset = 0
-                        }
-                    } else {
-                        onRerun()
-                    }
-                }
-                .simultaneousGesture(LongPressGesture(minimumDuration: 0.45).onEnded { _ in
-                    if horizontalOffset == 0 {
-                        onLongPress()
-                    }
-                })
+                .simultaneousGesture(
+                    ExclusiveGesture(
+                        LongPressGesture(minimumDuration: 0.5)
+                            .onEnded { _ in
+                                guard horizontalOffset == 0 else { return }
+                                onLongPress()
+                            },
+                        TapGesture()
+                            .onEnded {
+                                if horizontalOffset < 0 {
+                                    withAnimation(.spring(response: 0.28, dampingFraction: 0.78)) {
+                                        horizontalOffset = 0
+                                    }
+                                } else {
+                                    onRerun()
+                                }
+                            }
+                    )
+                )
+
+            // Sits outside rowContent so the parent TapGesture never fires
+            // when the 3-dot is tapped — same pattern as CookbookCard.
+            Button(action: onLongPress) {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 16, weight: .black))
+                    .foregroundStyle(WhistleTheme.charcoal)
+                    .frame(width: 34, height: 34)
+                    .background(WhistleTheme.sunny, in: Circle())
+            }
+            .buttonStyle(.plain)
+            .padding(.trailing, 24)
+            .offset(x: horizontalOffset)
+            .opacity(horizontalOffset == 0 ? 1 : 0)
+            .allowsHitTesting(horizontalOffset == 0)
         }
     }
 
@@ -264,21 +284,7 @@ struct HistoryRow: View {
 
             Spacer()
 
-            Menu {
-                Button("Cook Again", systemImage: "arrow.clockwise", action: onRerun)
-                Button("Edit Name", systemImage: "pencil", action: onEdit)
-                Button("Save as Cookbook", systemImage: "square.and.arrow.down", action: onSave)
-                ShareLink(item: shareText) {
-                    Label("Share", systemImage: "square.and.arrow.up")
-                }
-                Button("Delete", systemImage: "trash", role: .destructive, action: onDelete)
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 16, weight: .black))
-                    .foregroundStyle(WhistleTheme.charcoal)
-                    .frame(width: 34, height: 34)
-                    .background(WhistleTheme.sunny, in: Circle())
-            }
+            Color.clear.frame(width: 34, height: 34)
         }
         .padding(12)
         .background {
@@ -332,10 +338,6 @@ struct HistoryRow: View {
                     horizontalOffset = horizontalOffset < -56 ? -128 : 0
                 }
             }
-    }
-
-    private var shareText: String {
-        "I cooked \(session.title) with WhistleCounter: \(session.summary)."
     }
 
     private var iconColor: Color {
