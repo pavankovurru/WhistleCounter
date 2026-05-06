@@ -18,7 +18,7 @@ final class TimerVM: ObservableObject {
     private var activeHaptics = true
 
     init(cookbook: Cookbook?) {
-        let duration = cookbook?.timerDuration ?? 15 * 60
+        let duration = cookbook?.timerDuration ?? 30 * 60
         self.sourceCookbook = cookbook
         self.totalDuration = duration
         self.remaining = duration

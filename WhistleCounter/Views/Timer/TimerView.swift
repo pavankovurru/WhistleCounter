@@ -13,7 +13,7 @@ struct TimerView: View {
     @State private var startPulse = false
     var onClose: () -> Void
 
-    private let maxRingMinutes = 180
+    private let maxRingMinutes = 240
 
     init(settings: AppSettings, cookbook: Cookbook?, onClose: @escaping () -> Void) {
         self.settings = settings

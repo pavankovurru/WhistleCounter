@@ -31,10 +31,13 @@ struct OnboardingView: View {
               mascotState: .sleeping, color: WhistleTheme.mint),
     ]
 
+    private var isDarkSlide: Bool { slides[step].color == WhistleTheme.charcoal }
+
     var body: some View {
         ZStack {
             slides[step].color
                 .ignoresSafeArea()
+                .animation(.easeInOut(duration: 0.35), value: step)
 
             VStack(spacing: 0) {
                 HStack {
@@ -45,13 +48,14 @@ struct OnboardingView: View {
                         }
                     }
                     .font(.fredoka(15, weight: .bold))
-                    .foregroundStyle(WhistleTheme.charcoal)
+                    .foregroundStyle(isDarkSlide ? .white : WhistleTheme.charcoal)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 9)
-                    .background(.white.opacity(0.45), in: Capsule())
+                    .background(isDarkSlide ? .white.opacity(0.18) : .white.opacity(0.45), in: Capsule())
                 }
                 .padding(.horizontal, 24)
                 .padding(.top, 4)
+                .animation(.easeInOut(duration: 0.25), value: isDarkSlide)
 
                 TabView(selection: $step) {
                     ForEach(slides.indices, id: \.self) { index in
@@ -60,7 +64,6 @@ struct OnboardingView: View {
                     }
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
-                .animation(.spring(response: 0.5, dampingFraction: 0.72), value: step)
 
                 HStack(spacing: 8) {
                     ForEach(0..<slides.count, id: \.self) { index in
@@ -70,7 +73,9 @@ struct OnboardingView: View {
                             }
                         } label: {
                             Capsule()
-                                .fill(index == step ? WhistleTheme.charcoal : WhistleTheme.charcoal.opacity(0.24))
+                                .fill(index == step
+                                      ? (isDarkSlide ? .white : WhistleTheme.charcoal)
+                                      : (isDarkSlide ? .white.opacity(0.30) : WhistleTheme.charcoal.opacity(0.24)))
                                 .frame(width: index == step ? 34 : 12, height: 12)
                                 .contentShape(Rectangle())
                         }
@@ -79,11 +84,12 @@ struct OnboardingView: View {
                     }
                 }
                 .padding(.bottom, 18)
+                .animation(.easeInOut(duration: 0.25), value: isDarkSlide)
 
                 ChunkyButton(
                     title: step == slides.count - 1 ? "Let's Cook!" : "Next",
                     emoji: step == slides.count - 1 ? "🍲" : nil,
-                    color: WhistleTheme.charcoal,
+                    color: isDarkSlide ? WhistleTheme.sunny : WhistleTheme.charcoal,
                     fontSize: 22,
                     horizontalPadding: 22,
                     verticalPadding: 19,
@@ -100,6 +106,7 @@ struct OnboardingView: View {
                 }
                 .padding(.horizontal, 24)
                 .padding(.bottom, 38)
+                .animation(.easeInOut(duration: 0.25), value: isDarkSlide)
             }
         }
     }
