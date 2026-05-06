@@ -361,9 +361,9 @@ struct SettingsView: View {
 
     private func packColor(_ pack: SoundPack) -> Color {
         switch pack {
-        case .classic: WhistleTheme.sunny
-        case .funny: WhistleTheme.orange
-        case .zen: WhistleTheme.mint
+        case .classic: WhistleTheme.mint
+        case .funny: WhistleTheme.sunny
+        case .zen: WhistleTheme.orange
         }
     }
 
@@ -391,8 +391,8 @@ struct SettingsView: View {
         switch theme {
         case .default: WhistleTheme.sunny
         case .sunny: WhistleTheme.orange
-        case .mint: WhistleTheme.mint
-        case .berry: WhistleTheme.rose
+        case .mint: WhistleTheme.rose
+        case .berry: WhistleTheme.mint
         }
     }
 }
