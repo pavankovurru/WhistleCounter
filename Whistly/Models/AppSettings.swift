@@ -52,19 +52,27 @@ enum WhistleSensitivity: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    var suggestedDistance: String {
+        switch self {
+        case .low:    "~0.5–1m away"
+        case .medium: "~0.5–2m away"
+        case .high:   "~up to 3m away"
+        }
+    }
+
     nonisolated var minimumAmplitude: Float {
         switch self {
-        case .low: 0.012
-        case .medium: 0.006
-        case .high: 0.0025
+        case .low: 0.022    // requires a loud, close sound — very conservative
+        case .medium: 0.012 // filters out quiet ambient speech; real whistles are much louder
+        case .high: 0.006   // allows quieter sounds through; confidence gate does the work
         }
     }
 
     nonisolated var minimumConfidence: Float {
         switch self {
-        case .low: 0.66
-        case .medium: 0.45
-        case .high: 0.32
+        case .low: 0.70     // very strict — only a clear, dominant tonal signal passes
+        case .medium: 0.58  // speech peaks at 0.30–0.50; real whistles hit 0.80+; gap is safe
+        case .high: 0.46    // still above typical speech; far below any genuine whistle
         }
     }
 }

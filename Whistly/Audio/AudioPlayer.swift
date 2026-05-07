@@ -36,13 +36,13 @@ final class AudioPlayer: ObservableObject {
         if let url = Bundle.main.url(forResource: resourceName, withExtension: "mp3"),
            let player = try? AVAudioPlayer(contentsOf: url) {
             alarmPlayer = player
-            alarmPlayer?.numberOfLoops = 0  // play once
+            alarmPlayer?.numberOfLoops = -1  // loop until stopped
             alarmPlayer?.volume = 1
             alarmPlayer?.prepareToPlay()
             alarmPlayer?.play()
             isAlarmPlaying = true
             alarmStopTask = Task { @MainActor in
-                try? await Task.sleep(for: .seconds(14))
+                try? await Task.sleep(for: .seconds(30))
                 stopAlarm()
             }
         } else {
@@ -130,14 +130,14 @@ final class AudioPlayer: ObservableObject {
             return
         }
 
-        player.numberOfLoops = 0  // play once
+        player.numberOfLoops = -1  // loop until stopped
         player.volume = pack == .zen ? 0.9 : 1
         player.prepareToPlay()
         alarmPlayer = player
         player.play()
         isAlarmPlaying = true
         alarmStopTask = Task { @MainActor in
-            try? await Task.sleep(for: .seconds(14))
+            try? await Task.sleep(for: .seconds(30))
             stopAlarm()
         }
     }

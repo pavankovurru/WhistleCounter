@@ -214,11 +214,8 @@ struct WhistlyCounterView: View {
     }
 
     private var listeningButtonTitle: String {
-        if audioPlayer.isAlarmPlaying {
+        if audioPlayer.isAlarmPlaying || vm.showReadyPopup {
             return "Stop Sound"
-        }
-        if vm.count >= vm.target {
-            return "All Set"
         }
         if vm.detector.isListening {
             return "Stop Listening"
@@ -230,11 +227,8 @@ struct WhistlyCounterView: View {
     }
 
     private var listeningButtonIcon: String {
-        if audioPlayer.isAlarmPlaying {
+        if audioPlayer.isAlarmPlaying || vm.showReadyPopup {
             return "speaker.slash.fill"
-        }
-        if vm.count >= vm.target {
-            return "checkmark.circle.fill"
         }
         if vm.detector.isListening {
             return "stop.fill"
@@ -246,11 +240,8 @@ struct WhistlyCounterView: View {
     }
 
     private var listeningButtonColor: Color {
-        if audioPlayer.isAlarmPlaying || vm.detector.isListening || vm.detector.isStarting {
+        if audioPlayer.isAlarmPlaying || vm.showReadyPopup || vm.detector.isListening || vm.detector.isStarting {
             return WhistleTheme.orange
-        }
-        if vm.count >= vm.target {
-            return WhistleTheme.mint
         }
         return WhistleTheme.charcoal
     }
