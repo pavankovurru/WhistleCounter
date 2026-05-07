@@ -314,20 +314,25 @@ struct SettingsView: View {
                 settings.sensitivity = level.rawValue
             }
         } label: {
-            VStack(spacing: 4) {
+            VStack(spacing: 3) {
                 Image(systemName: sensitivityIcon(level))
                     .font(.system(size: 18, weight: .black))
+                    .foregroundStyle(active ? sensitivityForeground(level) : WhistleTheme.secondaryText(dark: dark))
                 Text(level.rawValue)
                     .font(.fredoka(13, weight: .black))
+                    .foregroundStyle(active ? sensitivityForeground(level) : WhistleTheme.secondaryText(dark: dark))
                 Text(level.suggestedDistance)
                     .font(.nunito(9, weight: .bold))
-                    .opacity(0.72)
+                    .foregroundStyle(
+                        active
+                        ? sensitivityForeground(level).opacity(0.65)
+                        : WhistleTheme.secondaryText(dark: dark).opacity(0.78)
+                    )
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
-            .foregroundStyle(active ? sensitivityForeground(level) : WhistleTheme.secondaryText(dark: dark))
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
+            .padding(.vertical, 11)
             .background {
                 let fill = active ? sensitivityColor(level) : WhistleTheme.background(dark: dark)
                 ZStack {
