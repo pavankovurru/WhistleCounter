@@ -70,8 +70,8 @@ let variants: [(String, IconPalette)] = [
             backgroundTop: RGBA(hex: 0xFFFDF8),
             backgroundBottom: cream,
             glow: RGBA(hex: 0xFFEED8),
-            body: orange,
-            belly: sunny,
+            body: RGBA(hex: 0xFF6B35),   // exact app orange
+            belly: RGBA(hex: 0xFFD93D),  // exact app sunny
             shadow: RGBA(hex: 0xB87858),
             cheek: RGBA(1.0, 0.41, 0.51)
         )
@@ -91,21 +91,21 @@ let variants: [(String, IconPalette)] = [
     (
         "WhistlyIconTinted.png",
         IconPalette(
-            backgroundTop: RGBA(hex: 0xFFFDF8),
-            backgroundBottom: cream,
-            glow: RGBA(hex: 0xFFEBD6),
-            body: RGBA(hex: 0xF86A32),
-            belly: RGBA(hex: 0xFFD93D),
-            shadow: RGBA(hex: 0xB87858),
-            cheek: RGBA(hex: 0xFF8AA8)
+            backgroundTop: RGBA(hex: 0xF2F2F2),
+            backgroundBottom: RGBA(hex: 0xE0E0E0),
+            glow: RGBA(hex: 0xE8E8E8),
+            body: RGBA(hex: 0x919191),   // orange → grayscale luminance 0.57
+            belly: RGBA(hex: 0xD4D4D4), // yellow → grayscale luminance 0.83
+            shadow: RGBA(hex: 0x404040),
+            cheek: RGBA(hex: 0xA6A6A6)
         )
     )
 ]
 
 let outputDir = URL(fileURLWithPath: "/Users/pavankovurru/Whistly/Whistly/Assets.xcassets/AppIcon.appiconset")
 let size = 1024
-let mascotScale: CGFloat = 4.36
-let mascotOrigin = CGPoint(x: (CGFloat(size) - 200 * mascotScale) / 2, y: 4)
+let mascotScale: CGFloat = 5.0
+let mascotOrigin = CGPoint(x: 12, y: -78)
 
 func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
     CGPoint(x: mascotOrigin.x + x * mascotScale, y: mascotOrigin.y + y * mascotScale)
@@ -244,7 +244,7 @@ func drawMascot(_ ctx: CGContext, palette: IconPalette) {
     let body = palette.body
 
     ctx.saveGState()
-    ctx.setShadow(offset: CGSize(width: 0, height: 28), blur: 36, color: palette.shadow.opacity(0.24).cg)
+    ctx.setShadow(offset: CGSize(width: 0, height: 5), blur: 8, color: palette.shadow.opacity(0.24).cg)
     drawWhistle(ctx, palette: palette)
     fill(ctx, handlePath(left: true), body.darkened(0.22))
     fill(ctx, handlePath(left: false), body.darkened(0.22))
@@ -252,14 +252,14 @@ func drawMascot(_ ctx: CGContext, palette: IconPalette) {
 
     let mainBody = bodyPath()
     ctx.saveGState()
-    ctx.setShadow(offset: CGSize(width: 0, height: 28), blur: 42, color: palette.shadow.opacity(0.34).cg)
+    ctx.setShadow(offset: CGSize(width: 0, height: 6), blur: 10, color: palette.shadow.opacity(0.34).cg)
     fillRadial(
         ctx,
         path: mainBody,
-        colors: [body.lightened(0.18), body.lightened(0.08), body, body.darkened(0.12)],
-        locations: [0, 0.24, 0.62, 1],
-        center: point(70, 90),
-        radius: 650
+        colors: [body.lightened(0.14), body.lightened(0.04), body, body.darkened(0.10)],
+        locations: [0, 0.30, 0.68, 1],
+        center: point(100, 85),
+        radius: 580
     )
     ctx.restoreGState()
 

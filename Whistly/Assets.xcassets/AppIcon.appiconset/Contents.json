@@ -1,7 +1,7 @@
 {
   "images" : [
     {
-      "filename" : "WhistleCounterIconLight.png",
+      "filename" : "WhistlyIconLight.png",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"
@@ -13,7 +13,7 @@
           "value" : "dark"
         }
       ],
-      "filename" : "WhistleCounterIconDark.png",
+      "filename" : "WhistlyIconDark.png",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"
@@ -25,7 +25,7 @@
           "value" : "tinted"
         }
       ],
-      "filename" : "WhistleCounterIconTinted.png",
+      "filename" : "WhistlyIconTinted.png",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"
