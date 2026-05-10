@@ -357,6 +357,7 @@ struct HistoryEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Bindable var session: CookingSession
     var dark: Bool
+    @State private var draftName: String = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -364,28 +365,28 @@ struct HistoryEditorSheet: View {
                 .font(.fredoka(24, weight: .black))
                 .foregroundStyle(WhistleTheme.text(dark: dark))
 
-            TextField("Cook name", text: nameBinding)
+            TextField("Cook name", text: $draftName)
                 .font(.fredoka(18, weight: .bold))
                 .foregroundStyle(WhistleTheme.text(dark: dark))
                 .padding(14)
                 .background(WhistleTheme.card(dark: dark), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
 
             ChunkyButton(title: "Done", systemImage: "checkmark", color: WhistleTheme.mint, fullWidth: true) {
-                dismiss()
+                commitAndDismiss()
             }
         }
         .padding(22)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(WhistleTheme.background(dark: dark))
+        .onAppear {
+            draftName = session.cookbookName ?? ""
+        }
     }
 
-    private var nameBinding: Binding<String> {
-        Binding {
-            session.title
-        } set: { newValue in
-            let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            session.cookbookName = trimmed.isEmpty ? nil : newValue
-        }
+    private func commitAndDismiss() {
+        let trimmed = draftName.trimmingCharacters(in: .whitespacesAndNewlines)
+        session.cookbookName = trimmed.isEmpty ? nil : trimmed
+        dismiss()
     }
 }
 

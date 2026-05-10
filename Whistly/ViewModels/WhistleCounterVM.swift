@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import UserNotifications
 
 @MainActor
 final class WhistlyCounterVM: ObservableObject {
@@ -33,6 +34,11 @@ final class WhistlyCounterVM: ObservableObject {
         detector.onWhistle = { [weak self] in
             Task { @MainActor in
                 self?.increment()
+            }
+        }
+        detector.onListeningRecovered = { [weak self] in
+            Task { @MainActor in
+                self?.handleListeningRecovered()
             }
         }
         detector.$isListening
@@ -90,7 +96,24 @@ final class WhistlyCounterVM: ObservableObject {
             mascotState = .celebrating
             showConfetti = true
             showReadyPopup = true
+            notifyTargetReached()
         }
+    }
+
+    private func notifyTargetReached() {
+        let center = UNUserNotificationCenter.current()
+        center.getNotificationSettings { settings in
+            if settings.authorizationStatus == .notDetermined {
+                center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
+            }
+        }
+        let content = UNMutableNotificationContent()
+        content.title = "Cooker is ready!"
+        content.body = "\(target) whistles counted. Time to take it off the heat."
+        content.sound = .defaultCritical
+        content.interruptionLevel = .timeSensitive
+        let request = UNNotificationRequest(identifier: "WhistlyWhistleTarget", content: content, trigger: nil)
+        center.add(request)
     }
 
     func reset() {
@@ -156,6 +179,11 @@ final class WhistlyCounterVM: ObservableObject {
         isRequestingLiveActivity = false
         hasLiveActivity = false
         LiveActivityManager.shared.endWhistle(finalStatus: finalStatus, dismissalDelay: dismissalDelay)
+    }
+
+    private func handleListeningRecovered() {
+        guard count < target else { return }
+        milestone = "Listening was briefly interrupted — please verify count."
     }
 
     private func refreshMilestone() {

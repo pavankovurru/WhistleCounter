@@ -417,10 +417,10 @@ struct SettingsView: View {
 
     private func themeFill(_ theme: MascotTheme) -> Color {
         switch theme {
-        case .default: WhistleTheme.sunny
-        case .sunny: WhistleTheme.orange
-        case .mint: WhistleTheme.rose
-        case .berry: WhistleTheme.mint
+        case .default: WhistleTheme.orange
+        case .sunny: WhistleTheme.sunny
+        case .mint: WhistleTheme.mint
+        case .berry: WhistleTheme.rose
         }
     }
 }
