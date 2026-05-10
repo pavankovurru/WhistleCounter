@@ -123,6 +123,9 @@ struct WhistlyCounterView: View {
                 didLogCompletion = false
             }
         }
+        .onChange(of: sensitivity) { _, newSensitivity in
+            vm.detector.updateSensitivity(newSensitivity)
+        }
         .onDisappear {
             AudioPlayer.shared.stopAlarm()
         }
@@ -196,14 +199,7 @@ struct WhistlyCounterView: View {
         }
 
         if vm.detector.isListening {
-            let frequency = Int(vm.detector.lastDetectedFrequency)
-            if frequency > 0 {
-                let confidence = Int((vm.detector.lastConfidence * 100).rounded())
-                let level = Int((min(vm.detector.lastInputLevel * 100, 1) * 100).rounded())
-                return "Listening live. \(frequency) Hz tone, \(confidence)% match, \(level)% level"
-            }
-            let level = Int((min(vm.detector.lastInputLevel * 100, 1) * 100).rounded())
-            return level > 0 ? "Listening live. Audio level \(level)%, no whistle yet." : "Listening live. Waiting for cooker steam."
+            return vm.detector.lastRejectionReason
         }
 
         if vm.count > 0 {
