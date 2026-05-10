@@ -35,7 +35,7 @@ struct WhistlyCounterView: View {
                     Spacer().frame(maxHeight: 32)
 
                     VStack(spacing: 20) {
-                        SlotPickerView(title: "Target", value: targetBinding, range: 1...20, suffix: "whistles", tint: WhistleTheme.orange, haptics: settings.hapticsEnabled)
+                        SlotPickerView(title: "Target", value: targetBinding, range: 1...100, suffix: "whistles", tint: WhistleTheme.orange, haptics: settings.hapticsEnabled)
 
                         VStack(spacing: 4) {
                             HStack(alignment: .firstTextBaseline, spacing: 4) {

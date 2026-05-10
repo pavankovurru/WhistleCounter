@@ -127,7 +127,7 @@ final class WhistlyCounterVM: ObservableObject {
     }
 
     func setTarget(_ newTarget: Int) {
-        target = min(20, max(1, newTarget))
+        target = min(100, max(1, newTarget))
         count = min(count, target)
         refreshMilestone()
         if hasLiveActivity {

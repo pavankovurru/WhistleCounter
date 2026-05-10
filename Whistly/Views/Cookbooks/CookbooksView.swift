@@ -699,7 +699,7 @@ struct CookbookEditorSheet: View {
 
     private func adjustSetupValue(by delta: Int) {
         if setupMode == .whistles {
-            whistleTarget = min(20, max(1, whistleTarget + delta))
+            whistleTarget = min(100, max(1, whistleTarget + delta))
         } else {
             minutes = min(180, max(1, minutes + delta))
         }
