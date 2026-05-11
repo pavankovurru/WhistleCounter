@@ -355,9 +355,15 @@ struct HistoryRow: View {
 
 struct HistoryEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
-    @Bindable var session: CookingSession
+    var session: CookingSession
     var dark: Bool
-    @State private var draftName: String = ""
+    @State private var draftName: String
+
+    init(session: CookingSession, dark: Bool) {
+        self.session = session
+        self.dark = dark
+        _draftName = State(initialValue: session.title)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -374,18 +380,25 @@ struct HistoryEditorSheet: View {
             ChunkyButton(title: "Done", systemImage: "checkmark", color: WhistleTheme.mint, fullWidth: true) {
                 commitAndDismiss()
             }
+            .disabled(!canSave)
+            .opacity(canSave ? 1 : 0.45)
         }
         .padding(22)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(WhistleTheme.background(dark: dark))
-        .onAppear {
-            draftName = session.cookbookName ?? ""
-        }
+    }
+
+    private var trimmedDraftName: String {
+        draftName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var canSave: Bool {
+        !trimmedDraftName.isEmpty
     }
 
     private func commitAndDismiss() {
-        let trimmed = draftName.trimmingCharacters(in: .whitespacesAndNewlines)
-        session.cookbookName = trimmed.isEmpty ? nil : trimmed
+        guard canSave else { return }
+        session.cookbookName = trimmedDraftName
         dismiss()
     }
 }
