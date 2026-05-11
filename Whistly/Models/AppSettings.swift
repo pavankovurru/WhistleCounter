@@ -62,47 +62,17 @@ enum WhistleSensitivity: String, CaseIterable, Identifiable {
 
     nonisolated var minimumAmplitude: Float {
         switch self {
-        case .low: 0.018
-        case .medium: 0.008
-        case .high: 0.004
+        case .low: 0.022    // requires a loud, close sound — very conservative
+        case .medium: 0.012 // filters out quiet ambient speech; real whistles are much louder
+        case .high: 0.006   // allows quieter sounds through; confidence gate does the work
         }
     }
 
     nonisolated var minimumConfidence: Float {
         switch self {
-        case .low: 0.62
-        case .medium: 0.48
-        case .high: 0.36
-        }
-    }
-
-    nonisolated var harmonicMaxRatio: Float {
-        switch self {
-        case .low: 0.20
-        case .medium: 0.32
-        case .high: 0.48
-        }
-    }
-
-    // Voicing test sums energy at peak ± k·f₀ for k = 1,2,3 across all
-    // candidate f₀. Real voiced speech averages 0.20+. Cooker whistles
-    // average <0.05 even with reverb.
-    nonisolated var voicingMaxScore: Float {
-        switch self {
-        case .low: 0.08
-        case .medium: 0.14
-        case .high: 0.22
-        }
-    }
-
-    // Fraction of band power that must sit in a ±5-bin window around the
-    // peak. Pure tones concentrate >0.80 here. Voiced speech with formant
-    // peak rarely exceeds 0.50 because harmonics steal energy from the band.
-    nonisolated var concentrationMin: Float {
-        switch self {
-        case .low: 0.65
-        case .medium: 0.45
-        case .high: 0.28
+        case .low: 0.70     // very strict — only a clear, dominant tonal signal passes
+        case .medium: 0.58  // speech peaks at 0.30–0.50; real whistles hit 0.80+; gap is safe
+        case .high: 0.46    // still above typical speech; far below any genuine whistle
         }
     }
 }

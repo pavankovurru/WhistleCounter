@@ -33,17 +33,14 @@ final class WhistleDetector: ObservableObject {
     private var isInsideWhistle = false
     private var lastWhistleCandidateAt = Date.distantPast
     private var lastCountedAt = Date.distantPast
-    private var candidatePeakBin: Int?
     private var lastSensitivity: WhistleSensitivity?
     private var notificationObservers: [NSObjectProtocol] = []
     private var wasInterrupted = false
 
-    private let whistleFrequencyRange: ClosedRange<Float> = 1100...5500
-    private let minimumWhistleDuration: TimeInterval = 0.18
+    private let whistleFrequencyRange: ClosedRange<Float> = 850...6000
+    private let minimumWhistleDuration: TimeInterval = 0.14
     private let minimumSilenceBetweenWhistles: TimeInterval = 0.26
-    private let cooldownPeriod: TimeInterval = 0.85
-    private let maxPeakDriftBins = 7
-    private let maxWhistleHoldDuration: TimeInterval = 1.6
+    private let cooldownPeriod: TimeInterval = 0.95
 
     func updateSensitivity(_ sensitivity: WhistleSensitivity) {
         guard isListening, lastSensitivity != sensitivity else {
@@ -86,7 +83,6 @@ final class WhistleDetector: ObservableObject {
         isStarting = false
         whistleStart = nil
         isInsideWhistle = false
-        candidatePeakBin = nil
         wasInterrupted = false
         lastSensitivity = nil
     }
@@ -96,7 +92,6 @@ final class WhistleDetector: ObservableObject {
         audioController.stop(deactivateSession: false)
         whistleStart = nil
         isInsideWhistle = false
-        candidatePeakBin = nil
         startAudioController(sensitivity: sensitivity)
     }
 
@@ -222,7 +217,7 @@ final class WhistleDetector: ObservableObject {
                     self.updateDisplayedReason(result.rejectionReason, isWhistle: result.isWhistle)
                     self.recordDiagnostic(result)
                     if result.isWhistle {
-                        self.handleWhistleCandidate(peakBin: result.peakBin)
+                        self.handleWhistleCandidate()
                     } else {
                         self.handleNonWhistleCandidate()
                     }
@@ -260,32 +255,10 @@ final class WhistleDetector: ObservableObject {
     private let diagnosticCapacity = 60
 
     private func updateDisplayedReason(_ newReason: String, isWhistle: Bool) {
-        let now = Date()
-        let isListening = newReason.hasPrefix("Listening for whistles")
-
-        // "Whistle confirmed" always shows immediately and resets timers.
-        if isWhistle {
-            lastRejectionReason = newReason
-            lastReasonShownAt = now
-            lastMeaningfulReasonAt = now
-            return
-        }
-
-        if !isListening {
-            // Meaningful rejection — rate-limit changes so the user can read.
-            if now.timeIntervalSince(lastReasonShownAt) >= reasonMinInterval || newReason != lastRejectionReason && lastRejectionReason.hasPrefix("Listening") {
-                lastRejectionReason = newReason
-                lastReasonShownAt = now
-            }
-            lastMeaningfulReasonAt = now
-        } else {
-            // Quiet frame — only revert to "Listening…" after a hold so the
-            // last meaningful reason has time to be read.
-            if now.timeIntervalSince(lastMeaningfulReasonAt) >= listeningHoldAfterAudio {
-                lastRejectionReason = newReason
-                lastReasonShownAt = now
-            }
-        }
+        // No rate limit — show what's happening on every frame. The view
+        // text now also includes live mic level and frequency, so the
+        // user can immediately see whether the mic is capturing audio.
+        lastRejectionReason = newReason
     }
 
     private func recordDiagnostic(_ result: WhistleAnalysisResult) {
@@ -299,27 +272,10 @@ final class WhistleDetector: ObservableObject {
         diagnosticBuffer
     }
 
-    private func handleWhistleCandidate(peakBin: Int) {
+    private func handleWhistleCandidate() {
         let now = Date()
         lastWhistleCandidateAt = now
-
-        // Fix #9: release inside-whistle latch even without a silence gap, so
-        // back-to-back cooker whistles with no quiet frame between them count.
-        if isInsideWhistle, now.timeIntervalSince(lastCountedAt) >= maxWhistleHoldDuration {
-            isInsideWhistle = false
-            whistleStart = nil
-            candidatePeakBin = nil
-        }
-
         guard !isInsideWhistle else { return }
-
-        if let previousPeakBin = candidatePeakBin, abs(peakBin - previousPeakBin) > maxPeakDriftBins {
-            whistleStart = now
-            candidatePeakBin = peakBin
-            return
-        }
-
-        candidatePeakBin = peakBin
 
         if whistleStart == nil {
             whistleStart = now
@@ -342,7 +298,6 @@ final class WhistleDetector: ObservableObject {
         guard now.timeIntervalSince(lastWhistleCandidateAt) >= minimumSilenceBetweenWhistles else { return }
         whistleStart = nil
         isInsideWhistle = false
-        candidatePeakBin = nil
     }
 
 }
@@ -369,9 +324,6 @@ private final class WhistleAudioController: @unchecked Sendable {
     ) {
         let minimumAmplitude = sensitivity.minimumAmplitude
         let minimumConfidence = sensitivity.minimumConfidence
-        let harmonicMaxRatio = sensitivity.harmonicMaxRatio
-        let voicingMaxScore = sensitivity.voicingMaxScore
-        let concentrationMin = sensitivity.concentrationMin
 
         queue.async { [weak self] in
             guard let self else { return }
@@ -421,9 +373,6 @@ private final class WhistleAudioController: @unchecked Sendable {
                     range: range,
                     minimumAmplitude: minimumAmplitude,
                     minimumConfidence: minimumConfidence,
-                    harmonicMaxRatio: harmonicMaxRatio,
-                    voicingMaxScore: voicingMaxScore,
-                    concentrationMin: concentrationMin,
                     fftSetup: setup
                 )
                 onAnalysis(result)
@@ -505,9 +454,6 @@ private final class WhistleAudioController: @unchecked Sendable {
         range: ClosedRange<Float>,
         minimumAmplitude: Float,
         minimumConfidence: Float,
-        harmonicMaxRatio: Float,
-        voicingMaxScore: Float,
-        concentrationMin: Float,
         fftSetup: FFTSetup
     ) -> WhistleAnalysisResult {
         guard sampleRate > 0, let channelData = buffer.floatChannelData else { return .empty }
@@ -528,16 +474,6 @@ private final class WhistleAudioController: @unchecked Sendable {
         var rms: Float = 0
         vDSP_rmsqv(samples, 1, &rms, vDSP_Length(usableFrameCount))
         guard rms >= minimumAmplitude else { return .silent(inputLevel: rms) }
-
-        // Clipping detection: when shouting close to mic, the input saturates.
-        // A clipped signal has crest factor ≈ 1 and peak sample near full
-        // scale. Reject these — they pose as tonal but are heavily distorted.
-        var peakAbs: Float = 0
-        vDSP_maxmgv(samples, 1, &peakAbs, vDSP_Length(usableFrameCount))
-        let crestFactor = peakAbs / max(rms, 1e-6)
-        if peakAbs > 0.95 && crestFactor < 1.7 {
-            return .clipped(inputLevel: rms)
-        }
 
         var mean: Float = 0
         vDSP_meanv(samples, 1, &mean, vDSP_Length(usableFrameCount))
@@ -579,118 +515,51 @@ private final class WhistleAudioController: @unchecked Sendable {
         let endBin = min(halfSize - 1, Int(range.upperBound / frequencyPerBin))
         guard startBin < endBin else { return .silent(inputLevel: rms) }
 
-        var totalPower: Float = 0
-        for index in 1..<halfSize { totalPower += magnitudes[index] }
-
+        var peakPower: Float = 0
+        var peakIndex = startBin
         var bandPower: Float = 0
-        var primaryPeakPower: Float = 0
-        var primaryPeakIndex = startBin
+        var totalPower: Float = 0
+
+        for index in 1..<halfSize {
+            totalPower += magnitudes[index]
+        }
+
         for index in startBin...endBin {
             let power = magnitudes[index]
             bandPower += power
-            if power > primaryPeakPower {
-                primaryPeakPower = power
-                primaryPeakIndex = index
+            if power > peakPower {
+                peakPower = power
+                peakIndex = index
             }
         }
 
-        // Evaluate the primary peak.
-        let primary = evaluatePeak(
-            peakIndex: primaryPeakIndex,
-            peakPower: primaryPeakPower,
-            magnitudes: magnitudes,
-            startBin: startBin,
-            endBin: endBin,
-            halfSize: halfSize,
-            bandPower: bandPower,
-            totalPower: totalPower,
-            frequencyPerBin: frequencyPerBin,
-            rms: rms,
-            range: range,
-            minimumAmplitude: minimumAmplitude,
-            minimumConfidence: minimumConfidence,
-            harmonicMaxRatio: harmonicMaxRatio,
-            voicingMaxScore: voicingMaxScore,
-            concentrationMin: concentrationMin
-        )
-
-        return primary
-    }
-
-    nonisolated private static func evaluatePeak(
-        peakIndex: Int,
-        peakPower: Float,
-        magnitudes: [Float],
-        startBin: Int,
-        endBin: Int,
-        halfSize: Int,
-        bandPower: Float,
-        totalPower: Float,
-        frequencyPerBin: Float,
-        rms: Float,
-        range: ClosedRange<Float>,
-        minimumAmplitude: Float,
-        minimumConfidence: Float,
-        harmonicMaxRatio: Float,
-        voicingMaxScore: Float,
-        concentrationMin: Float
-    ) -> WhistleAnalysisResult {
         let averagePower = bandPower / Float(endBin - startBin + 1)
-
-        // Fix #5: symmetric local-dominance window — limit each side to the
-        // smaller of the two available halves so the peak isn't compared
-        // against a one-sided sample at band edges.
-        let halfWindow = 18
-        let availableLeft = peakIndex - startBin - 2
-        let availableRight = endBin - peakIndex - 2
-        let symmetricRadius = max(0, min(halfWindow, min(availableLeft, availableRight)))
+        let localStart = max(startBin, peakIndex - 18)
+        let localEnd = min(endBin, peakIndex + 18)
         var localPower: Float = 0
         var localBins = 0
-        if symmetricRadius >= 1 {
-            for offset in 3...(2 + symmetricRadius) {
-                let lo = peakIndex - offset
-                let hi = peakIndex + offset
-                if lo >= 0 { localPower += magnitudes[lo]; localBins += 1 }
-                if hi < halfSize { localPower += magnitudes[hi]; localBins += 1 }
-            }
+        for index in localStart...localEnd where abs(index - peakIndex) > 2 {
+            localPower += magnitudes[index]
+            localBins += 1
         }
-        let localAveragePower = localBins > 0 ? localPower / Float(localBins) : averagePower
-
+        let localAveragePower = localPower / Float(max(localBins, 1))
         let dominance = peakPower / max(averagePower, 0.000_001)
         let localDominance = peakPower / max(localAveragePower, 0.000_001)
         let bandRatio = bandPower / max(totalPower, 0.000_001)
         let peakShare = peakPower / max(bandPower, 0.000_001)
         let frequency = Float(peakIndex) * frequencyPerBin
-
-        let harmonicRatio = harmonicStackRatio(magnitudes: magnitudes, peakIndex: peakIndex, peakPower: peakPower, halfSize: halfSize)
-        let voicingScore = spectralCombScore(magnitudes: magnitudes, peakIndex: peakIndex, peakPower: peakPower, frequencyPerBin: frequencyPerBin, halfSize: halfSize)
-        let concentration = concentrationAtPeak(magnitudes: magnitudes, peakIndex: peakIndex, bandPower: bandPower, halfSize: halfSize)
-
         let dominanceScore = min(max((dominance - 1.8) / 6.0, 0), 1)
         let localDominanceScore = min(max((localDominance - 4.0) / 14.0, 0), 1)
         let bandScore = min(max((bandRatio - 0.045) / 0.30, 0), 1)
         let peakScore = min(max((peakShare - 0.025) / 0.11, 0), 1)
         let amplitudeScore = min(max((rms - minimumAmplitude) / max(minimumAmplitude * 3, 0.001), 0), 1)
-        let purityScore = min(max((harmonicMaxRatio - harmonicRatio) / max(harmonicMaxRatio * 0.9, 0.001), 0), 1)
-        let unvoicedScore = min(max((voicingMaxScore - voicingScore) / max(voicingMaxScore * 0.875, 0.001), 0), 1)
-        let confidence = (dominanceScore * 0.18) + (localDominanceScore * 0.16) + (bandScore * 0.10) + (peakScore * 0.08) + (amplitudeScore * 0.08) + (purityScore * 0.22) + (unvoicedScore * 0.18)
-
+        let confidence = (dominanceScore * 0.32) + (localDominanceScore * 0.26) + (bandScore * 0.20) + (peakScore * 0.12) + (amplitudeScore * 0.10)
         let hasTonalPeak = dominance >= 2.2 || localDominance >= 5.8
         let hasFocusedBandEnergy = bandRatio >= 0.055 || peakShare >= 0.035
-        let isHarmonicallyClean = harmonicRatio < harmonicMaxRatio
-        let isUnvoiced = voicingScore < voicingMaxScore
-        let isConcentrated = concentration >= concentrationMin
+
         let inRange = range.contains(frequency)
         let confidentEnough = confidence >= minimumConfidence
-
-        let isWhistle = hasTonalPeak
-            && hasFocusedBandEnergy
-            && isHarmonicallyClean
-            && isUnvoiced
-            && isConcentrated
-            && confidentEnough
-            && inRange
-
+        let isWhistle = hasTonalPeak && hasFocusedBandEnergy && confidentEnough && inRange
         let freqHz = Int(frequency.rounded())
         let reason: String
         if isWhistle {
@@ -701,12 +570,6 @@ private final class WhistleAudioController: @unchecked Sendable {
             reason = "Sound is too noisy, not a clear tone"
         } else if !hasFocusedBandEnergy {
             reason = "Energy spread across many frequencies"
-        } else if !isUnvoiced {
-            reason = "Detected vocal cords — speech or singing"
-        } else if !isConcentrated {
-            reason = "Multiple tones present — likely speech or music"
-        } else if !isHarmonicallyClean {
-            reason = "Has overtones — likely an instrument"
         } else if !confidentEnough {
             reason = "Tone too weak to be sure"
         } else {
@@ -718,83 +581,14 @@ private final class WhistleAudioController: @unchecked Sendable {
             frequency: frequency,
             confidence: confidence,
             inputLevel: rms,
-            harmonicRatio: harmonicRatio,
-            voicingScore: voicingScore,
-            concentration: concentration,
+            harmonicRatio: 0,
+            voicingScore: 0,
+            concentration: bandRatio,
             peakBin: peakIndex,
             rejectionReason: reason
         )
     }
 
-    // Fraction of band power within ±5 bins of the peak. A pure tone
-    // concentrates >0.80 here; voiced speech (formant + spread harmonics
-    // across the band) rarely exceeds 0.50.
-    nonisolated private static func concentrationAtPeak(magnitudes: [Float], peakIndex: Int, bandPower: Float, halfSize: Int) -> Float {
-        guard bandPower > 0 else { return 0 }
-        let lo = max(1, peakIndex - 5)
-        let hi = min(halfSize - 1, peakIndex + 5)
-        guard lo <= hi else { return 0 }
-        var windowPower: Float = 0
-        for index in lo...hi { windowPower += magnitudes[index] }
-        return windowPower / bandPower
-    }
-
-    nonisolated private static func harmonicStackRatio(magnitudes: [Float], peakIndex: Int, peakPower: Float, halfSize: Int) -> Float {
-        guard peakPower > 0 else { return 0 }
-        let secondHarmonic = peakBandMax(magnitudes: magnitudes, center: peakIndex * 2, halfSize: halfSize, halfWidth: 2)
-        let thirdHarmonic = peakBandMax(magnitudes: magnitudes, center: peakIndex * 3, halfSize: halfSize, halfWidth: 2)
-        return (secondHarmonic + thirdHarmonic) / peakPower
-    }
-
-    nonisolated private static func peakBandMax(magnitudes: [Float], center: Int, halfSize: Int, halfWidth: Int) -> Float {
-        guard center > 0, center < halfSize else { return 0 }
-        let lo = max(1, center - halfWidth)
-        let hi = min(halfSize - 1, center + halfWidth)
-        guard lo <= hi else { return 0 }
-        var best: Float = 0
-        for index in lo...hi {
-            if magnitudes[index] > best { best = magnitudes[index] }
-        }
-        return best
-    }
-
-    // Sum of energy at peak ± k·f₀ for k = 1,2,3 on both sides, averaged
-    // across whichever neighbor positions exist within the spectrum, and
-    // normalized by the peak's power. For each candidate f₀ in 60–500 Hz
-    // we compute this average; the score returned is the highest match.
-    //
-    // A real cooker whistle has noise-floor neighbors at every spacing →
-    // score < 0.05. Voiced speech of any pitch (including shouting,
-    // children, falsetto) produces strong harmonic neighbors at ITS f₀ →
-    // score 0.20+. Robust against asymmetric spectra where one side is in
-    // formant roll-off and the other isn't.
-    nonisolated private static func spectralCombScore(magnitudes: [Float], peakIndex: Int, peakPower: Float, frequencyPerBin: Float, halfSize: Int) -> Float {
-        guard peakPower > 0, frequencyPerBin > 0 else { return 0 }
-        let minF0Bins = max(1, Int((60.0 / frequencyPerBin).rounded(.up)))
-        let maxF0Bins = max(minF0Bins, Int((500.0 / frequencyPerBin).rounded(.down)))
-        var best: Float = 0
-        for f0Bins in minF0Bins...maxF0Bins {
-            var combPower: Float = 0
-            var combPositions: Int = 0
-            for k in 1...3 {
-                let lower = peakIndex - k * f0Bins
-                let upper = peakIndex + k * f0Bins
-                if lower >= 2 {
-                    combPower += peakBandMax(magnitudes: magnitudes, center: lower, halfSize: halfSize, halfWidth: 1)
-                    combPositions += 1
-                }
-                if upper < halfSize - 1 {
-                    combPower += peakBandMax(magnitudes: magnitudes, center: upper, halfSize: halfSize, halfWidth: 1)
-                    combPositions += 1
-                }
-            }
-            guard combPositions > 0 else { continue }
-            let avgNeighbor = combPower / Float(combPositions)
-            let score = avgNeighbor / peakPower
-            if score > best { best = score }
-        }
-        return best
-    }
 }
 
 nonisolated struct WhistleAnalysisResult: Sendable {
@@ -811,10 +605,19 @@ nonisolated struct WhistleAnalysisResult: Sendable {
     static let empty = WhistleAnalysisResult(isWhistle: false, frequency: 0, confidence: 0, inputLevel: 0, harmonicRatio: 0, voicingScore: 0, concentration: 0, peakBin: 0, rejectionReason: "Listening for whistles…")
 
     static func silent(inputLevel: Float) -> WhistleAnalysisResult {
-        WhistleAnalysisResult(isWhistle: false, frequency: 0, confidence: 0, inputLevel: inputLevel, harmonicRatio: 0, voicingScore: 0, concentration: 0, peakBin: 0, rejectionReason: "Listening for whistles…")
+        let levelPct = Int((inputLevel * 100).rounded())
+        return WhistleAnalysisResult(isWhistle: false, frequency: 0, confidence: 0, inputLevel: inputLevel, harmonicRatio: 0, voicingScore: 0, concentration: 0, peakBin: 0, rejectionReason: "Listening for whistles… (mic level \(levelPct)%)")
+    }
+
+    static func quiet(inputLevel: Float) -> WhistleAnalysisResult {
+        WhistleAnalysisResult(isWhistle: false, frequency: 0, confidence: 0, inputLevel: inputLevel, harmonicRatio: 0, voicingScore: 0, concentration: 0, peakBin: 0, rejectionReason: "Background sounds — too quiet to be a whistle")
     }
 
     static func clipped(inputLevel: Float) -> WhistleAnalysisResult {
         WhistleAnalysisResult(isWhistle: false, frequency: 0, confidence: 0, inputLevel: inputLevel, harmonicRatio: 0, voicingScore: 0, concentration: 0, peakBin: 0, rejectionReason: "Audio is clipping — lower the volume")
+    }
+
+    func withRejection(_ newReason: String) -> WhistleAnalysisResult {
+        WhistleAnalysisResult(isWhistle: false, frequency: frequency, confidence: confidence, inputLevel: inputLevel, harmonicRatio: harmonicRatio, voicingScore: voicingScore, concentration: concentration, peakBin: peakBin, rejectionReason: newReason)
     }
 }

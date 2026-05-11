@@ -199,7 +199,13 @@ struct WhistlyCounterView: View {
         }
 
         if vm.detector.isListening {
-            return vm.detector.lastRejectionReason
+            let level = Int((vm.detector.lastInputLevel * 100).rounded())
+            let freq = Int(vm.detector.lastDetectedFrequency.rounded())
+            let reason = vm.detector.lastRejectionReason
+            if freq > 0 {
+                return "lvl \(level)% • \(freq)Hz • \(reason)"
+            }
+            return "lvl \(level)% • \(reason)"
         }
 
         if vm.count > 0 {
