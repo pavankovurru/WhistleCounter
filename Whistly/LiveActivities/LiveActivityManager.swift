@@ -91,6 +91,19 @@ final class LiveActivityManager {
         end(mode: .whistle, finalStatus: finalStatus, dismissalDelay: dismissalDelay)
     }
 
+    func endWhistle(count: Int, target: Int, finalStatus: String? = nil, dismissalDelay: TimeInterval = 30) {
+        endWhistle(finalState: .init(
+            mode: .whistle,
+            title: "Whistly",
+            status: finalStatus ?? "Target reached",
+            count: count,
+            target: target,
+            startedAt: activity(for: .whistle)?.content.state.startedAt ?? Date(),
+            endsAt: nil,
+            isFinished: true
+        ), dismissalDelay: dismissalDelay)
+    }
+
     func endTimer(finalStatus: String? = nil, dismissalDelay: TimeInterval = 30) {
         end(mode: .timer, finalStatus: finalStatus, dismissalDelay: dismissalDelay)
     }
@@ -143,6 +156,15 @@ final class LiveActivityManager {
                 state.status = finalStatus
             }
             let content = ActivityContent(state: state, staleDate: Date())
+            await activity.end(content, dismissalPolicy: .after(Date().addingTimeInterval(dismissalDelay)))
+        }
+    }
+
+    private func endWhistle(finalState: CookingActivityAttributes.ContentState, dismissalDelay: TimeInterval) {
+        guard let activity = activity(for: .whistle) else { return }
+        setActivity(nil, for: .whistle)
+        Task { @MainActor in
+            let content = ActivityContent(state: finalState, staleDate: Date())
             await activity.end(content, dismissalPolicy: .after(Date().addingTimeInterval(dismissalDelay)))
         }
     }

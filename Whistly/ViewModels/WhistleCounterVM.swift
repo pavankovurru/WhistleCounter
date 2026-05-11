@@ -21,15 +21,6 @@ final class WhistlyCounterVM: ObservableObject {
     private var countGapSeconds: TimeInterval = AppSettings.defaultWhistleCountGapSeconds
     private var lastIncrementAt = Date.distantPast
 
-    private let milestones = [
-        0: "Choose a target, then start listening.",
-        1: "One whistle counted. Keep the phone nearby.",
-        2: "Halfway there, superstar! ⭐",
-        3: "Almost there. Stay close to the cooker.",
-        4: "One more whistle to go.",
-        5: "Target reached. Your food is ready."
-    ]
-
     init(cookbook: Cookbook?) {
         self.sourceCookbook = cookbook
         self.target = cookbook?.whistleTarget ?? 3
@@ -144,8 +135,22 @@ final class WhistlyCounterVM: ObservableObject {
     }
 
     func setTarget(_ newTarget: Int) {
+        let wasComplete = count >= target
         target = min(100, max(1, newTarget))
         count = min(count, target)
+        let isComplete = count >= target
+        if wasComplete && !isComplete {
+            AudioPlayer.shared.stopAlarm()
+            showReadyPopup = false
+            showConfetti = false
+            mascotState = detector.isListening ? .bouncing : .idle
+        } else if isComplete {
+            detector.stop()
+            endLiveActivity(finalStatus: "Target reached")
+            mascotState = .celebrating
+            showConfetti = true
+            showReadyPopup = true
+        }
         refreshMilestone()
         if hasLiveActivity {
             LiveActivityManager.shared.updateWhistle(count: count, target: target, isListening: detector.isListening, isFinished: count >= target)
@@ -170,7 +175,11 @@ final class WhistlyCounterVM: ObservableObject {
             let shouldKeepActivity = didStart && self.wantsLiveActivity && self.detector.isListening && self.count < self.target
             self.hasLiveActivity = shouldKeepActivity
             if didStart && !shouldKeepActivity {
-                LiveActivityManager.shared.endWhistle(finalStatus: self.count >= self.target ? "Target reached" : "Stopped", dismissalDelay: self.count >= self.target ? 30 : 5)
+                if self.count >= self.target {
+                    LiveActivityManager.shared.endWhistle(count: self.count, target: self.target, finalStatus: "Target reached", dismissalDelay: 30)
+                } else {
+                    LiveActivityManager.shared.endWhistle(finalStatus: "Stopped", dismissalDelay: 5)
+                }
             } else if shouldKeepActivity {
                 LiveActivityManager.shared.updateWhistle(count: self.count, target: self.target, isListening: self.detector.isListening, isFinished: false)
             }
@@ -195,7 +204,11 @@ final class WhistlyCounterVM: ObservableObject {
         guard hasLiveActivity || isRequestingLiveActivity else { return }
         isRequestingLiveActivity = false
         hasLiveActivity = false
-        LiveActivityManager.shared.endWhistle(finalStatus: finalStatus, dismissalDelay: dismissalDelay)
+        if count >= target {
+            LiveActivityManager.shared.endWhistle(count: count, target: target, finalStatus: finalStatus, dismissalDelay: dismissalDelay)
+        } else {
+            LiveActivityManager.shared.endWhistle(finalStatus: finalStatus, dismissalDelay: dismissalDelay)
+        }
     }
 
     private func handleListeningRecovered() {
@@ -205,21 +218,25 @@ final class WhistlyCounterVM: ObservableObject {
 
     private func refreshMilestone() {
         if count >= target {
-            milestone = milestones[5] ?? "Done!"
+            milestone = "Target reached. Your food is ready."
         } else if count == 0 {
             if detector.isListening {
                 milestone = "Listening for the first cooker whistle."
             } else if detector.isStarting {
                 milestone = "Setting up the microphone..."
             } else {
-                milestone = milestones[0] ?? "Choose a target, then start listening."
+                milestone = "Choose a target, then start listening."
             }
         } else if count == target - 1 {
-            milestone = milestones[4] ?? "One more..."
+            milestone = "One more whistle to go."
+        } else if count == 1 {
+            let remaining = target - count
+            milestone = "One whistle counted. \(remaining) more to go."
         } else if count >= max(1, target / 2) {
-            milestone = milestones[2] ?? "Halfway there!"
+            let remaining = target - count
+            milestone = "Halfway there. \(remaining) whistles to go."
         } else {
-            milestone = milestones[count] ?? "Keep going!"
+            milestone = "\(count) of \(target) whistles counted. Keep going."
         }
     }
 }

@@ -148,7 +148,7 @@ struct SettingsView: View {
                 HStack(spacing: 9) {
                     whistleGapPresetButton(seconds: 0, title: "None", subtitle: "0 sec")
                     whistleGapPresetButton(seconds: AppSettings.defaultWhistleCountGapSeconds, title: "Suggested", subtitle: "2 sec")
-                    whistleGapPresetButton(seconds: 10, title: "Careful", subtitle: "10 sec")
+                    whistleGapPresetButton(seconds: 5, title: "Careful", subtitle: "5 sec")
                 }
 
                 HStack(spacing: 12) {
@@ -525,7 +525,7 @@ struct SettingsView: View {
             WhistleTheme.charcoal
         case Int(AppSettings.defaultWhistleCountGapSeconds):
             WhistleTheme.mint
-        case 10:
+        case 5:
             WhistleTheme.orange
         default:
             WhistleTheme.sunny
@@ -534,7 +534,7 @@ struct SettingsView: View {
 
     private func whistleGapForeground(_ seconds: Int) -> Color {
         switch seconds {
-        case 0, 10:
+        case 0, 5:
             .white
         default:
             WhistleTheme.charcoal
