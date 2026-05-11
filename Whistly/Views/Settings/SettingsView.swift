@@ -146,8 +146,8 @@ struct SettingsView: View {
         settingsSection(title: "Gap Between Whistles", icon: "timer", tint: whistleGapColor(whistleGapSecondsInt)) {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 9) {
-                    whistleGapPresetButton(seconds: 0, title: "None", subtitle: "0 sec")
-                    whistleGapPresetButton(seconds: AppSettings.defaultWhistleCountGapSeconds, title: "Suggested", subtitle: "2 sec")
+                    whistleGapPresetButton(seconds: 0, title: "Off", subtitle: "0 sec")
+                    whistleGapPresetButton(seconds: AppSettings.defaultWhistleCountGapSeconds, title: "Balanced", subtitle: "2 sec")
                     whistleGapPresetButton(seconds: 5, title: "Careful", subtitle: "5 sec")
                 }
 
