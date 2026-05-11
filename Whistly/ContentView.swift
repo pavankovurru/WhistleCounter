@@ -128,6 +128,8 @@ struct ContentView: View {
     private func ensureSettings() {
         if settingsRows.isEmpty {
             modelContext.insert(AppSettings())
+        } else {
+            settingsRows.forEach { $0.repairStoredValuesIfNeeded() }
         }
     }
 

@@ -1,6 +1,6 @@
 import Combine
 import Foundation
-import UserNotifications
+@preconcurrency import UserNotifications
 
 @MainActor
 final class TimerVM: ObservableObject {
@@ -124,19 +124,31 @@ final class TimerVM: ObservableObject {
     }
 
     private func scheduleNotification() {
-        // Check current status before requesting — avoids triggering the system dialog on repeat starts
-        UNUserNotificationCenter.current().getNotificationSettings { settings in
-            if settings.authorizationStatus == .notDetermined {
-                UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
-            }
+        let center = UNUserNotificationCenter.current()
+        let notificationDelay = max(1, remaining)
+        center.getNotificationSettings { settings in
+            guard settings.authorizationStatus.allowsWhistlyNotificationDelivery else { return }
+            let content = UNMutableNotificationContent()
+            content.title = "WAKE UP!"
+            content.body = "Something smells amazing!"
+            content.sound = .default
+            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: notificationDelay, repeats: false)
+            let request = UNNotificationRequest(identifier: "WhistlyTimer", content: content, trigger: trigger)
+            center.add(request)
         }
-        let content = UNMutableNotificationContent()
-        content.title = "WAKE UP!"
-        content.body = "Something smells amazing!"
-        content.sound = .defaultCritical
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: max(1, remaining), repeats: false)
-        let request = UNNotificationRequest(identifier: "WhistlyTimer", content: content, trigger: trigger)
-        UNUserNotificationCenter.current().add(request)
     }
 
+}
+
+private extension UNAuthorizationStatus {
+    nonisolated var allowsWhistlyNotificationDelivery: Bool {
+        switch self {
+        case .authorized, .provisional, .ephemeral:
+            return true
+        case .notDetermined, .denied:
+            return false
+        @unknown default:
+            return false
+        }
+    }
 }

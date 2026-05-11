@@ -33,14 +33,21 @@ final class WhistleDetector: ObservableObject {
     private var isInsideWhistle = false
     private var lastWhistleCandidateAt = Date.distantPast
     private var lastCountedAt = Date.distantPast
+    private var lastCountedWhistleEndedAt = Date.distantPast
+    private var countedWhistleIsAwaitingEnd = false
+    private var candidatePeakBin: Int?
+    private var candidatePeakHistory: [Int] = []
     private var lastSensitivity: WhistleSensitivity?
     private var notificationObservers: [NSObjectProtocol] = []
     private var wasInterrupted = false
 
-    private let whistleFrequencyRange: ClosedRange<Float> = 850...6000
-    private let minimumWhistleDuration: TimeInterval = 0.14
-    private let minimumSilenceBetweenWhistles: TimeInterval = 0.26
-    private let cooldownPeriod: TimeInterval = 0.95
+    private let whistleFrequencyRange: ClosedRange<Float> = 750...7_000
+    private let minimumWhistleDuration: TimeInterval = 0.20
+    private let minimumSilenceBetweenWhistles: TimeInterval = 0.45
+    private var countGapSeconds: TimeInterval = AppSettings.defaultWhistleCountGapSeconds
+    private let minimumCandidateFrames = 3
+    private let maxPeakDriftBins = 32
+    private let maxCandidateBinStdDev: Float = 24
 
     func updateSensitivity(_ sensitivity: WhistleSensitivity) {
         guard isListening, lastSensitivity != sensitivity else {
@@ -51,11 +58,17 @@ final class WhistleDetector: ObservableObject {
         restartListeningInPlace()
     }
 
-    func start(sensitivity: WhistleSensitivity) {
+    func updateCountGap(_ seconds: TimeInterval) {
+        countGapSeconds = AppSettings.normalizedWhistleCountGapSeconds(seconds)
+    }
+
+    func start(sensitivity: WhistleSensitivity, countGapSeconds: TimeInterval) {
         guard !isListening, !isStarting else { return }
         isStarting = true
         errorMessage = nil
         lastSensitivity = sensitivity
+        updateCountGap(countGapSeconds)
+        lastCountedAt = .distantPast
         registerSessionObservers()
 
         requestPermission { [weak self] granted in
@@ -83,6 +96,11 @@ final class WhistleDetector: ObservableObject {
         isStarting = false
         whistleStart = nil
         isInsideWhistle = false
+        candidatePeakBin = nil
+        candidatePeakHistory.removeAll()
+        lastCountedAt = .distantPast
+        lastCountedWhistleEndedAt = .distantPast
+        countedWhistleIsAwaitingEnd = false
         wasInterrupted = false
         lastSensitivity = nil
     }
@@ -92,6 +110,9 @@ final class WhistleDetector: ObservableObject {
         audioController.stop(deactivateSession: false)
         whistleStart = nil
         isInsideWhistle = false
+        countedWhistleIsAwaitingEnd = false
+        candidatePeakBin = nil
+        candidatePeakHistory.removeAll()
         startAudioController(sensitivity: sensitivity)
     }
 
@@ -217,7 +238,7 @@ final class WhistleDetector: ObservableObject {
                     self.updateDisplayedReason(result.rejectionReason, isWhistle: result.isWhistle)
                     self.recordDiagnostic(result)
                     if result.isWhistle {
-                        self.handleWhistleCandidate()
+                        self.handleWhistleCandidate(peakBin: result.peakBin)
                     } else {
                         self.handleNonWhistleCandidate()
                     }
@@ -272,10 +293,24 @@ final class WhistleDetector: ObservableObject {
         diagnosticBuffer
     }
 
-    private func handleWhistleCandidate() {
+    private func handleWhistleCandidate(peakBin: Int) {
         let now = Date()
         lastWhistleCandidateAt = now
         guard !isInsideWhistle else { return }
+
+        if let previousPeakBin = candidatePeakBin, abs(peakBin - previousPeakBin) > maxPeakDriftBins {
+            whistleStart = now
+            candidatePeakBin = peakBin
+            candidatePeakHistory = [peakBin]
+            updateDisplayedReason("Pitch is shifting like speech, not a cooker whistle", isWhistle: false)
+            return
+        }
+
+        candidatePeakBin = peakBin
+        candidatePeakHistory.append(peakBin)
+        if candidatePeakHistory.count > 8 {
+            candidatePeakHistory.removeFirst()
+        }
 
         if whistleStart == nil {
             whistleStart = now
@@ -284,20 +319,49 @@ final class WhistleDetector: ObservableObject {
 
         guard let whistleStart,
               now.timeIntervalSince(whistleStart) >= minimumWhistleDuration,
-              now.timeIntervalSince(lastCountedAt) >= cooldownPeriod else {
+              candidatePeakHistory.count >= minimumCandidateFrames,
+              now.timeIntervalSince(lastCountedWhistleEndedAt) >= countGapSeconds else {
+            if now.timeIntervalSince(lastCountedWhistleEndedAt) < countGapSeconds {
+                let remaining = max(0, countGapSeconds - now.timeIntervalSince(lastCountedWhistleEndedAt))
+                updateDisplayedReason("Whistle gap active (\(Int(ceil(remaining)))s)", isWhistle: false)
+            }
             return
+        }
+
+        if candidatePeakHistory.count >= 3 {
+            let mean = Float(candidatePeakHistory.reduce(0, +)) / Float(candidatePeakHistory.count)
+            var sumSq: Float = 0
+            for bin in candidatePeakHistory {
+                let diff = Float(bin) - mean
+                sumSq += diff * diff
+            }
+            let stdDev = sqrt(sumSq / Float(candidatePeakHistory.count))
+            if stdDev > maxCandidateBinStdDev {
+                self.whistleStart = now
+                candidatePeakHistory = [peakBin]
+                updateDisplayedReason("Pitch is wobbling like voice or music", isWhistle: false)
+                return
+            }
         }
 
         lastCountedAt = now
         isInsideWhistle = true
+        countedWhistleIsAwaitingEnd = true
+        candidatePeakHistory.removeAll()
         onWhistle?()
     }
 
     private func handleNonWhistleCandidate() {
         let now = Date()
         guard now.timeIntervalSince(lastWhistleCandidateAt) >= minimumSilenceBetweenWhistles else { return }
+        if countedWhistleIsAwaitingEnd {
+            lastCountedWhistleEndedAt = now
+            countedWhistleIsAwaitingEnd = false
+        }
         whistleStart = nil
         isInsideWhistle = false
+        candidatePeakBin = nil
+        candidatePeakHistory.removeAll()
     }
 
 }
@@ -324,6 +388,10 @@ private final class WhistleAudioController: @unchecked Sendable {
     ) {
         let minimumAmplitude = sensitivity.minimumAmplitude
         let minimumConfidence = sensitivity.minimumConfidence
+        let minimumConcentration = sensitivity.minimumConcentration
+        let maximumSpeechEnergyRatio = sensitivity.maximumSpeechEnergyRatio
+        let maximumVocalHarmonicCount = sensitivity.maximumVocalHarmonicCount
+        let maximumHarmonicRatio = sensitivity.maximumHarmonicRatio
 
         queue.async { [weak self] in
             guard let self else { return }
@@ -373,6 +441,10 @@ private final class WhistleAudioController: @unchecked Sendable {
                     range: range,
                     minimumAmplitude: minimumAmplitude,
                     minimumConfidence: minimumConfidence,
+                    minimumConcentration: minimumConcentration,
+                    maximumSpeechEnergyRatio: maximumSpeechEnergyRatio,
+                    maximumVocalHarmonicCount: maximumVocalHarmonicCount,
+                    maximumHarmonicRatio: maximumHarmonicRatio,
                     fftSetup: setup
                 )
                 onAnalysis(result)
@@ -454,6 +526,10 @@ private final class WhistleAudioController: @unchecked Sendable {
         range: ClosedRange<Float>,
         minimumAmplitude: Float,
         minimumConfidence: Float,
+        minimumConcentration: Float,
+        maximumSpeechEnergyRatio: Float,
+        maximumVocalHarmonicCount: Int,
+        maximumHarmonicRatio: Float,
         fftSetup: FFTSetup
     ) -> WhistleAnalysisResult {
         guard sampleRate > 0, let channelData = buffer.floatChannelData else { return .empty }
@@ -474,6 +550,11 @@ private final class WhistleAudioController: @unchecked Sendable {
         var rms: Float = 0
         vDSP_rmsqv(samples, 1, &rms, vDSP_Length(usableFrameCount))
         guard rms >= minimumAmplitude else { return .silent(inputLevel: rms) }
+
+        var peakAbs: Float = 0
+        vDSP_maxmgv(samples, 1, &peakAbs, vDSP_Length(usableFrameCount))
+        let crestFactor = peakAbs / max(rms, 0.000_001)
+        let clippedInput = peakAbs > 0.96 && crestFactor < 1.65
 
         var mean: Float = 0
         vDSP_meanv(samples, 1, &mean, vDSP_Length(usableFrameCount))
@@ -515,6 +596,15 @@ private final class WhistleAudioController: @unchecked Sendable {
         let endBin = min(halfSize - 1, Int(range.upperBound / frequencyPerBin))
         guard startBin < endBin else { return .silent(inputLevel: rms) }
 
+        let speechStartBin = max(1, Int((80.0 / frequencyPerBin).rounded(.down)))
+        let speechEndBin = min(startBin - 1, Int((750.0 / frequencyPerBin).rounded(.up)))
+        var speechPower: Float = 0
+        if speechStartBin <= speechEndBin {
+            for index in speechStartBin...speechEndBin {
+                speechPower += magnitudes[index]
+            }
+        }
+
         var peakPower: Float = 0
         var peakIndex = startBin
         var bandPower: Float = 0
@@ -549,23 +639,51 @@ private final class WhistleAudioController: @unchecked Sendable {
         let peakShare = peakPower / max(bandPower, 0.000_001)
         let frequency = Float(peakIndex) * frequencyPerBin
         let dominanceScore = min(max((dominance - 1.8) / 6.0, 0), 1)
-        let localDominanceScore = min(max((localDominance - 4.0) / 14.0, 0), 1)
-        let bandScore = min(max((bandRatio - 0.045) / 0.30, 0), 1)
-        let peakScore = min(max((peakShare - 0.025) / 0.11, 0), 1)
+        let localDominanceScore = min(max((localDominance - 4.5) / 14.0, 0), 1)
+        let bandScore = min(max((bandRatio - 0.04) / 0.28, 0), 1)
+        let peakScore = min(max((peakShare - 0.025) / 0.10, 0), 1)
         let amplitudeScore = min(max((rms - minimumAmplitude) / max(minimumAmplitude * 3, 0.001), 0), 1)
         let confidence = (dominanceScore * 0.32) + (localDominanceScore * 0.26) + (bandScore * 0.20) + (peakScore * 0.12) + (amplitudeScore * 0.10)
-        let hasTonalPeak = dominance >= 2.2 || localDominance >= 5.8
-        let hasFocusedBandEnergy = bandRatio >= 0.055 || peakShare >= 0.035
+        let hasTonalPeak = dominance >= 2.1 || localDominance >= 5.2
+        let hasFocusedBandEnergy = bandRatio >= 0.045 || peakShare >= 0.028
 
+        let concentration = concentrationAtPeak(magnitudes: magnitudes, peakIndex: peakIndex, bandPower: bandPower, halfSize: halfSize)
+        let harmonicRatio = harmonicStackRatio(magnitudes: magnitudes, peakIndex: peakIndex, peakPower: peakPower, halfSize: halfSize)
+        let vocalHarmonicCount = vocalHarmonicCount(magnitudes: magnitudes, peakIndex: peakIndex, peakPower: peakPower, frequencyPerBin: frequencyPerBin, halfSize: halfSize)
+        let speechEnergyRatio = speechPower / max(speechPower + bandPower, 0.000_001)
+        let isConcentrated = concentration >= minimumConcentration
+        let strongCookerBand = bandRatio >= 0.10 && localDominance >= 5.0 && confidence >= max(0, minimumConfidence - 0.08)
+        let speechDominated = speechEnergyRatio > maximumSpeechEnergyRatio
+        let vocalHarmonics = vocalHarmonicCount > maximumVocalHarmonicCount && speechEnergyRatio > 0.10
+        let musicOrVoiceHarmonics = harmonicRatio > maximumHarmonicRatio && vocalHarmonicCount >= 3 && speechEnergyRatio > 0.08
+        let clippedSpeech = clippedInput && (speechEnergyRatio > 0.10 || vocalHarmonicCount >= 4)
         let inRange = range.contains(frequency)
         let confidentEnough = confidence >= minimumConfidence
-        let isWhistle = hasTonalPeak && hasFocusedBandEnergy && confidentEnough && inRange
+        let isWhistle = inRange
+            && confidentEnough
+            && hasTonalPeak
+            && hasFocusedBandEnergy
+            && (isConcentrated || strongCookerBand)
+            && !speechDominated
+            && !vocalHarmonics
+            && !musicOrVoiceHarmonics
+            && !clippedSpeech
         let freqHz = Int(frequency.rounded())
         let reason: String
         if isWhistle {
             reason = "Whistle confirmed at \(freqHz) Hz"
+        } else if clippedSpeech {
+            reason = "Close voice is clipping the mic"
         } else if !inRange {
             reason = "Tone at \(freqHz) Hz is outside cooker range"
+        } else if speechDominated {
+            reason = "Human voice energy detected"
+        } else if vocalHarmonics {
+            reason = "Speech or music harmonics detected"
+        } else if musicOrVoiceHarmonics {
+            reason = "Harmonic tone looks like voice or music"
+        } else if !isConcentrated {
+            reason = "High-frequency sound is too broad"
         } else if !hasTonalPeak {
             reason = "Sound is too noisy, not a clear tone"
         } else if !hasFocusedBandEnergy {
@@ -581,12 +699,70 @@ private final class WhistleAudioController: @unchecked Sendable {
             frequency: frequency,
             confidence: confidence,
             inputLevel: rms,
-            harmonicRatio: 0,
-            voicingScore: 0,
-            concentration: bandRatio,
+            harmonicRatio: harmonicRatio,
+            voicingScore: Float(vocalHarmonicCount),
+            concentration: concentration,
             peakBin: peakIndex,
             rejectionReason: reason
         )
+    }
+
+    nonisolated private static func concentrationAtPeak(magnitudes: [Float], peakIndex: Int, bandPower: Float, halfSize: Int) -> Float {
+        guard bandPower > 0 else { return 0 }
+        let lo = max(1, peakIndex - 5)
+        let hi = min(halfSize - 1, peakIndex + 5)
+        guard lo <= hi else { return 0 }
+        var windowPower: Float = 0
+        for index in lo...hi {
+            windowPower += magnitudes[index]
+        }
+        return windowPower / bandPower
+    }
+
+    nonisolated private static func harmonicStackRatio(magnitudes: [Float], peakIndex: Int, peakPower: Float, halfSize: Int) -> Float {
+        guard peakPower > 0 else { return 0 }
+        let secondHarmonic = peakBandMax(magnitudes: magnitudes, center: peakIndex * 2, halfSize: halfSize, halfWidth: 2)
+        let thirdHarmonic = peakBandMax(magnitudes: magnitudes, center: peakIndex * 3, halfSize: halfSize, halfWidth: 2)
+        return (secondHarmonic + thirdHarmonic) / peakPower
+    }
+
+    nonisolated private static func vocalHarmonicCount(magnitudes: [Float], peakIndex: Int, peakPower: Float, frequencyPerBin: Float, halfSize: Int) -> Int {
+        guard peakPower > 0, frequencyPerBin > 0 else { return 0 }
+        let minF0Bins = max(2, Int((70.0 / frequencyPerBin).rounded(.up)))
+        let maxF0Bins = max(minF0Bins, Int((450.0 / frequencyPerBin).rounded(.down)))
+        let harmonicThreshold = peakPower * 0.10
+        var bestCount = 0
+
+        for f0Bins in minF0Bins...maxF0Bins {
+            var count = 0
+            for harmonic in 1...22 {
+                let bin = harmonic * f0Bins
+                if bin >= halfSize - 1 { break }
+                if abs(bin - peakIndex) <= 1 { continue }
+                if peakBandMax(magnitudes: magnitudes, center: bin, halfSize: halfSize, halfWidth: 1) >= harmonicThreshold {
+                    count += 1
+                }
+            }
+            if count > bestCount {
+                bestCount = count
+            }
+        }
+
+        return bestCount
+    }
+
+    nonisolated private static func peakBandMax(magnitudes: [Float], center: Int, halfSize: Int, halfWidth: Int) -> Float {
+        guard center > 0, center < halfSize else { return 0 }
+        let lo = max(1, center - halfWidth)
+        let hi = min(halfSize - 1, center + halfWidth)
+        guard lo <= hi else { return 0 }
+        var best: Float = 0
+        for index in lo...hi {
+            if magnitudes[index] > best {
+                best = magnitudes[index]
+            }
+        }
+        return best
     }
 
 }

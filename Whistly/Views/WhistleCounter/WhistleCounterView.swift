@@ -23,6 +23,7 @@ struct WhistlyCounterView: View {
     private var dark: Bool { settings.darkModeEnabled || colorScheme == .dark }
     private var sensitivity: WhistleSensitivity { WhistleSensitivity(rawValue: settings.sensitivity) ?? .medium }
     private var soundPack: SoundPack { SoundPack(rawValue: settings.soundPack) ?? .classic }
+    private var countGapSeconds: TimeInterval { settings.resolvedWhistleCountGapSeconds }
 
     var body: some View {
         GeometryReader { proxy in
@@ -80,7 +81,7 @@ struct WhistlyCounterView: View {
                             } else if vm.count >= vm.target {
                                 return
                             } else {
-                                vm.toggleListening(sensitivity: sensitivity)
+                                vm.toggleListening(sensitivity: sensitivity, countGapSeconds: countGapSeconds)
                             }
                         }
                         .padding(.horizontal, 38)
@@ -125,6 +126,9 @@ struct WhistlyCounterView: View {
         }
         .onChange(of: sensitivity) { _, newSensitivity in
             vm.detector.updateSensitivity(newSensitivity)
+        }
+        .onChange(of: countGapSeconds) { _, newGap in
+            vm.updateCountGap(newGap)
         }
         .onDisappear {
             AudioPlayer.shared.stopAlarm()

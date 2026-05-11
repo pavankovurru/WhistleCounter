@@ -1,6 +1,6 @@
 import Combine
 import Foundation
-import UserNotifications
+@preconcurrency import UserNotifications
 
 @MainActor
 final class WhistlyCounterVM: ObservableObject {
@@ -18,6 +18,8 @@ final class WhistlyCounterVM: ObservableObject {
     private var hasLiveActivity = false
     private var isRequestingLiveActivity = false
     private var wantsLiveActivity = false
+    private var countGapSeconds: TimeInterval = AppSettings.defaultWhistleCountGapSeconds
+    private var lastIncrementAt = Date.distantPast
 
     private let milestones = [
         0: "Choose a target, then start listening.",
@@ -57,8 +59,10 @@ final class WhistlyCounterVM: ObservableObject {
         refreshMilestone()
     }
 
-    func startListening(sensitivity: WhistleSensitivity) {
-        detector.start(sensitivity: sensitivity)
+    func startListening(sensitivity: WhistleSensitivity, countGapSeconds: TimeInterval) {
+        let normalizedGap = AppSettings.normalizedWhistleCountGapSeconds(countGapSeconds)
+        self.countGapSeconds = normalizedGap
+        detector.start(sensitivity: sensitivity, countGapSeconds: normalizedGap)
         mascotState = .bouncing
         Task { @MainActor [weak self] in
             await self?.startLiveActivityWhenListening()
@@ -76,12 +80,25 @@ final class WhistlyCounterVM: ObservableObject {
         refreshMilestone()
     }
 
-    func toggleListening(sensitivity: WhistleSensitivity) {
-        detector.isListening ? stopListening() : startListening(sensitivity: sensitivity)
+    func toggleListening(sensitivity: WhistleSensitivity, countGapSeconds: TimeInterval) {
+        detector.isListening ? stopListening() : startListening(sensitivity: sensitivity, countGapSeconds: countGapSeconds)
+    }
+
+    func updateCountGap(_ seconds: TimeInterval) {
+        let normalizedGap = AppSettings.normalizedWhistleCountGapSeconds(seconds)
+        countGapSeconds = normalizedGap
+        detector.updateCountGap(normalizedGap)
     }
 
     func increment() {
         guard count < target else { return }
+        let now = Date()
+        guard now.timeIntervalSince(lastIncrementAt) >= countGapSeconds else {
+            let remaining = max(0, countGapSeconds - now.timeIntervalSince(lastIncrementAt))
+            milestone = "Whistle gap active: \(Int(ceil(remaining)))s before the next count."
+            return
+        }
+        lastIncrementAt = now
         count += 1
         mascotState = .bouncing
         refreshMilestone()
@@ -102,24 +119,24 @@ final class WhistlyCounterVM: ObservableObject {
 
     private func notifyTargetReached() {
         let center = UNUserNotificationCenter.current()
+        let completedTarget = target
         center.getNotificationSettings { settings in
-            if settings.authorizationStatus == .notDetermined {
-                center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
-            }
+            guard settings.authorizationStatus.allowsWhistlyNotificationDelivery else { return }
+            let content = UNMutableNotificationContent()
+            content.title = "Cooker is ready!"
+            content.body = "\(completedTarget) whistles counted. Time to take it off the heat."
+            content.sound = .default
+            content.interruptionLevel = .timeSensitive
+            let request = UNNotificationRequest(identifier: "WhistlyWhistleTarget", content: content, trigger: nil)
+            center.add(request)
         }
-        let content = UNMutableNotificationContent()
-        content.title = "Cooker is ready!"
-        content.body = "\(target) whistles counted. Time to take it off the heat."
-        content.sound = .defaultCritical
-        content.interruptionLevel = .timeSensitive
-        let request = UNNotificationRequest(identifier: "WhistlyWhistleTarget", content: content, trigger: nil)
-        center.add(request)
     }
 
     func reset() {
         detector.stop()
         endLiveActivity(finalStatus: "Reset", dismissalDelay: 5)
         count = 0
+        lastIncrementAt = .distantPast
         mascotState = .idle
         showReadyPopup = false
         showConfetti = false
@@ -203,6 +220,19 @@ final class WhistlyCounterVM: ObservableObject {
             milestone = milestones[2] ?? "Halfway there!"
         } else {
             milestone = milestones[count] ?? "Keep going!"
+        }
+    }
+}
+
+private extension UNAuthorizationStatus {
+    nonisolated var allowsWhistlyNotificationDelivery: Bool {
+        switch self {
+        case .authorized, .provisional, .ephemeral:
+            return true
+        case .notDetermined, .denied:
+            return false
+        @unknown default:
+            return false
         }
     }
 }

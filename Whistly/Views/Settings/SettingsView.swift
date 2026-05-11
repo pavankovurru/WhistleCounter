@@ -7,6 +7,8 @@ struct SettingsView: View {
     @ObservedObject private var audioPlayer = AudioPlayer.shared
 
     private var dark: Bool { settings.darkModeEnabled || colorScheme == .dark }
+    private var activeSoundPack: SoundPack { SoundPack(rawValue: settings.soundPack) ?? .classic }
+    private var activeSensitivity: WhistleSensitivity { WhistleSensitivity(rawValue: settings.sensitivity) ?? .medium }
 
     var body: some View {
         ZStack {
@@ -19,6 +21,7 @@ struct SettingsView: View {
                     quickTogglesCard
                     soundPackCard
                     sensitivityCard
+                    whistleGapCard
                     whistlyColorCard
                     replayCard
                 }
@@ -82,7 +85,7 @@ struct SettingsView: View {
     }
 
     private var soundPackCard: some View {
-        settingsSection(title: "Alert Sound", icon: "speaker.wave.2.fill", tint: WhistleTheme.orange) {
+        settingsSection(title: "Alert Sound", icon: "speaker.wave.2.fill", tint: packColor(activeSoundPack)) {
             VStack(spacing: 10) {
                 HStack(spacing: 9) {
                     ForEach(SoundPack.allCases) { pack in
@@ -99,7 +102,7 @@ struct SettingsView: View {
     }
 
     private var sensitivityCard: some View {
-        settingsSection(title: "Whistle Sensitivity", icon: "waveform", tint: WhistleTheme.sunny) {
+        settingsSection(title: "Whistle Sensitivity", icon: "waveform", tint: sensitivityColor(activeSensitivity)) {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 9) {
                     sensitivityButton(.low)
@@ -135,6 +138,42 @@ struct SettingsView: View {
                     .animation(.spring(response: 0.3, dampingFraction: 0.72), value: settings.sensitivity)
                 }
                 .frame(height: 28)
+            }
+        }
+    }
+
+    private var whistleGapCard: some View {
+        settingsSection(title: "Gap Between Whistles", icon: "timer", tint: whistleGapColor(whistleGapSecondsInt)) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 9) {
+                    whistleGapPresetButton(seconds: 0, title: "None", subtitle: "0 sec")
+                    whistleGapPresetButton(seconds: AppSettings.defaultWhistleCountGapSeconds, title: "Suggested", subtitle: "2 sec")
+                    whistleGapPresetButton(seconds: 10, title: "Careful", subtitle: "10 sec")
+                }
+
+                HStack(spacing: 12) {
+                    whistleGapAdjustButton(systemImage: "minus", delta: -1)
+
+                    VStack(spacing: 1) {
+                        Text("\(whistleGapSecondsInt) sec")
+                            .font(.fredoka(22, weight: .black))
+                            .foregroundStyle(WhistleTheme.text(dark: dark))
+                            .contentTransition(.numericText())
+                        Text("between counted whistles")
+                            .font(.nunito(11, weight: .black))
+                            .foregroundStyle(WhistleTheme.secondaryText(dark: dark))
+                    }
+                    .frame(maxWidth: .infinity)
+
+                    whistleGapAdjustButton(systemImage: "plus", delta: 1)
+                }
+                .padding(10)
+                .background(WhistleTheme.background(dark: dark), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+
+                Text("Minimum time before the next cooker whistle can be counted.")
+                    .font(.nunito(12, weight: .black))
+                    .foregroundStyle(WhistleTheme.secondaryText(dark: dark))
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
@@ -347,6 +386,71 @@ struct SettingsView: View {
         .buttonStyle(.plain)
     }
 
+    private var whistleGapSecondsInt: Int {
+        Int(settings.resolvedWhistleCountGapSeconds)
+    }
+
+    private func whistleGapPresetButton(seconds: Double, title: String, subtitle: String) -> some View {
+        let active = whistleGapSecondsInt == Int(seconds)
+        return Button {
+            setWhistleCountGap(seconds)
+        } label: {
+            VStack(spacing: 4) {
+                Image(systemName: active ? "checkmark.circle.fill" : "timer")
+                    .font(.system(size: 17, weight: .black))
+                Text(title)
+                    .font(.fredoka(13, weight: .black))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                Text(subtitle)
+                    .font(.nunito(9, weight: .bold))
+                    .opacity(0.72)
+            }
+            .foregroundStyle(active ? whistleGapForeground(Int(seconds.rounded())) : WhistleTheme.secondaryText(dark: dark))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 11)
+            .background {
+                let fill = active ? whistleGapColor(Int(seconds.rounded())) : WhistleTheme.background(dark: dark)
+                ZStack {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(active ? fill.darkened(0.38).opacity(0.64) : WhistleTheme.shadow(dark: dark))
+                        .offset(y: active ? 3 : 1.5)
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(fill)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func whistleGapAdjustButton(systemImage: String, delta: Double) -> some View {
+        let nextValue = AppSettings.normalizedWhistleCountGapSeconds(settings.resolvedWhistleCountGapSeconds + delta)
+        let canChange = nextValue != settings.resolvedWhistleCountGapSeconds
+
+        return Button {
+            setWhistleCountGap(nextValue)
+        } label: {
+            Image(systemName: systemImage)
+                .font(.system(size: 15, weight: .black))
+                .foregroundStyle(canChange ? WhistleTheme.charcoal : WhistleTheme.secondaryText(dark: dark))
+                .frame(width: 44, height: 44)
+                .background(canChange ? WhistleTheme.sunny : WhistleTheme.card(dark: dark), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                .shadow(color: canChange ? WhistleTheme.shadow(dark: dark) : .clear, radius: 4, y: 2)
+        }
+        .buttonStyle(.plain)
+        .disabled(!canChange)
+        .opacity(canChange ? 1 : 0.48)
+    }
+
+    private func setWhistleCountGap(_ seconds: Double) {
+        let normalized = AppSettings.normalizedWhistleCountGapSeconds(seconds)
+        guard normalized != settings.resolvedWhistleCountGapSeconds else { return }
+        HapticManager.selection(enabled: settings.hapticsEnabled)
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.68)) {
+            settings.whistleCountGapSeconds = normalized
+        }
+    }
+
     private func mascotButton(_ theme: MascotTheme) -> some View {
         let active = MascotTheme.resolved(from: settings.mascotTheme) == theme
         return Button {
@@ -413,6 +517,28 @@ struct SettingsView: View {
 
     private func sensitivityForeground(_ level: WhistleSensitivity) -> Color {
         level == .high ? .white : WhistleTheme.charcoal
+    }
+
+    private func whistleGapColor(_ seconds: Int) -> Color {
+        switch seconds {
+        case 0:
+            WhistleTheme.charcoal
+        case Int(AppSettings.defaultWhistleCountGapSeconds):
+            WhistleTheme.mint
+        case 10:
+            WhistleTheme.orange
+        default:
+            WhistleTheme.sunny
+        }
+    }
+
+    private func whistleGapForeground(_ seconds: Int) -> Color {
+        switch seconds {
+        case 0, 10:
+            .white
+        default:
+            WhistleTheme.charcoal
+        }
     }
 
     private func themeFill(_ theme: MascotTheme) -> Color {
