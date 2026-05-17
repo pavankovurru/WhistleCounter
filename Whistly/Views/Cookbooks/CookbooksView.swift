@@ -236,11 +236,11 @@ struct CookbookCard: View {
     var onLongPress: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             ZStack(alignment: .topTrailing) {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .fill(cardColor)
-                    .frame(height: 86)
+                    .frame(height: 82)
                     .overlay {
                         RoundedRectangle(cornerRadius: 18, style: .continuous)
                             .stroke(cardStrokeColor, lineWidth: 1.2)
@@ -266,20 +266,7 @@ struct CookbookCard: View {
                 .padding(7)
             }
 
-            Text(cookbook.name)
-                .font(.fredoka(17, weight: .black))
-                .foregroundStyle(WhistleTheme.text(dark: dark))
-                .lineLimit(2)
-                .minimumScaleFactor(0.82)
-
-            HStack(spacing: 5) {
-                if let whistleTarget = cookbook.whistleTarget {
-                    tag("🎙 \(whistleTarget)", color: WhistleTheme.sunny.opacity(0.65))
-                }
-                if let timerDuration = cookbook.timerDuration {
-                    tag("⏱ \(timerDuration.shortDurationText)", color: WhistleTheme.mint.opacity(0.55))
-                }
-            }
+            titleRow
 
             ChunkyButton(
                 title: "Cook This!",
@@ -292,9 +279,8 @@ struct CookbookCard: View {
                 fullWidth: true,
                 action: onCook
             )
-                .padding(.top, 2)
         }
-        .padding(14)
+        .padding(12)
         .background {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .fill(WhistleTheme.card(dark: dark))
@@ -319,11 +305,42 @@ struct CookbookCard: View {
         CookbookPalette.strokeColor(for: colorIndex)
     }
 
-    private func tag(_ text: String, color: Color) -> some View {
-        Text(text)
-            .font(.fredoka(11, weight: .black))
+    private var titleRow: some View {
+        HStack(alignment: .center, spacing: 6) {
+            Text(cookbook.name)
+                .font(.fredoka(17, weight: .black))
+                .foregroundStyle(WhistleTheme.text(dark: dark))
+                .lineLimit(1)
+                .minimumScaleFactor(0.74)
+
+            Spacer(minLength: 4)
+
+            HStack(spacing: 4) {
+                if let whistleTarget = cookbook.whistleTarget {
+                    metricPill(systemImage: "mic.fill", title: "\(whistleTarget)", color: WhistleTheme.sunny.opacity(0.72))
+                }
+                if let timerDuration = cookbook.timerDuration {
+                    metricPill(systemImage: "timer", title: timerDuration.shortDurationText, color: WhistleTheme.mint.opacity(0.62))
+                }
+            }
+            .fixedSize(horizontal: true, vertical: false)
+        }
+        .padding(.horizontal, 3)
+        .frame(maxWidth: .infinity)
+        .frame(minHeight: 25)
+    }
+
+    private func metricPill(systemImage: String, title: String, color: Color) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: systemImage)
+                .font(.system(size: 8.8, weight: .black))
+            Text(title)
+                .font(.fredoka(10.5, weight: .black))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
             .foregroundStyle(WhistleTheme.charcoal)
-            .padding(.horizontal, 7)
+            .padding(.horizontal, 5.5)
             .padding(.vertical, 4)
             .background(color, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }

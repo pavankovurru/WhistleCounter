@@ -318,10 +318,7 @@ struct AppActionSheetOverlay: View {
 
             VStack(alignment: .leading, spacing: 14) {
                 HStack(spacing: 12) {
-                    Text(emoji)
-                        .font(.system(size: 32))
-                        .frame(width: 58, height: 58)
-                        .background(WhistleTheme.sunny, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    headerIcon
 
                     VStack(alignment: .leading, spacing: 3) {
                         Text(title)
@@ -357,6 +354,20 @@ struct AppActionSheetOverlay: View {
             withAnimation(.spring(response: 0.34, dampingFraction: 0.76)) {
                 visible = true
             }
+        }
+    }
+
+    @ViewBuilder
+    private var headerIcon: some View {
+        if emoji.trimmingCharacters(in: .whitespacesAndNewlines).localizedCaseInsensitiveCompare("idly") == .orderedSame {
+            IdlyPiecesIcon(size: 43)
+                .frame(width: 58, height: 58)
+                .background(WhistleTheme.sunny, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        } else {
+            Text(emoji)
+                .font(.system(size: 32))
+                .frame(width: 58, height: 58)
+                .background(WhistleTheme.sunny, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
     }
 

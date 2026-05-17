@@ -76,8 +76,8 @@ struct WhistlyCounterView: View {
                             iconWidth: 20
                         ) {
                             HapticManager.tap(enabled: settings.hapticsEnabled)
-                            if audioPlayer.isAlarmPlaying {
-                                AudioPlayer.shared.stopAlarm()
+                            if audioPlayer.isAlarmPlaying || vm.showReadyPopup {
+                                resetCounter()
                             } else if vm.count >= vm.target {
                                 return
                             } else {
@@ -170,8 +170,13 @@ struct WhistlyCounterView: View {
             dark: dark,
             haptics: settings.hapticsEnabled,
             onBack: closeScreen,
-            onReset: { vm.reset() }
+            onReset: resetCounter
         )
+    }
+
+    private func resetCounter() {
+        AudioPlayer.shared.stopAlarm()
+        vm.reset()
     }
 
     private func closeScreen() {
@@ -203,7 +208,7 @@ struct WhistlyCounterView: View {
         }
 
         if vm.detector.isListening {
-            let level = Int((vm.detector.lastInputLevel * 100).rounded())
+            let level = micLevelPercent(vm.detector.lastInputLevel)
             let freq = Int(vm.detector.lastDetectedFrequency.rounded())
             let reason = vm.detector.lastRejectionReason
             if freq > 0 {
@@ -217,6 +222,13 @@ struct WhistlyCounterView: View {
         }
 
         return "Automatic counter is off."
+    }
+
+    private func micLevelPercent(_ rms: Float) -> Int {
+        let clampedLevel = max(Double(rms), 0.000_001)
+        let decibels = 20.0 * log10(clampedLevel)
+        let normalized = min(max((decibels + 60.0) / 48.0, 0), 1)
+        return Int((normalized * 100).rounded())
     }
 
     private var listeningButtonTitle: String {

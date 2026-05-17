@@ -32,6 +32,7 @@ final class WhistleDetector: ObservableObject {
     private var whistleStart: Date?
     private var lastWhistleCandidateAt = Date.distantPast
     private var lastCountedWhistleEndedAt = Date.distantPast
+    private var countedWhistleIsAwaitingEnd = false
     private var candidatePeakBin: Int?
     private var candidatePeakHistory: [Int] = []
     private var lastSensitivity: WhistleSensitivity?
@@ -39,11 +40,11 @@ final class WhistleDetector: ObservableObject {
     private var wasInterrupted = false
 
     private let whistleFrequencyRange: ClosedRange<Float> = 750...7_000
-    private let minimumCompletedWhistleDuration: TimeInterval = 0.55
-    private let minimumSilenceBeforeCompletedWhistle: TimeInterval = 0.45
+    private let minimumWhistleDuration: TimeInterval = 0.22
+    private let minimumSilenceBetweenWhistles: TimeInterval = 0.45
     private var countGapSeconds: TimeInterval = AppSettings.defaultWhistleCountGapSeconds
-    private let minimumCandidateFrames = 6
-    private let maximumCandidateHistoryFrames = 64
+    private let minimumCandidateFrames = 3
+    private let maximumCandidateHistoryFrames = 8
     private let maxPeakDriftBins = 32
     private let maxCandidateBinStdDev: Float = 24
 
@@ -96,6 +97,7 @@ final class WhistleDetector: ObservableObject {
         candidatePeakBin = nil
         candidatePeakHistory.removeAll()
         lastCountedWhistleEndedAt = .distantPast
+        countedWhistleIsAwaitingEnd = false
         wasInterrupted = false
         lastSensitivity = nil
     }
@@ -104,6 +106,7 @@ final class WhistleDetector: ObservableObject {
         guard let sensitivity = lastSensitivity else { return }
         audioController.stop(deactivateSession: false)
         whistleStart = nil
+        countedWhistleIsAwaitingEnd = false
         candidatePeakBin = nil
         candidatePeakHistory.removeAll()
         startAudioController(sensitivity: sensitivity)
@@ -289,6 +292,7 @@ final class WhistleDetector: ObservableObject {
     private func handleWhistleCandidate(peakBin: Int) {
         let now = Date()
         lastWhistleCandidateAt = now
+        guard !countedWhistleIsAwaitingEnd else { return }
 
         if let previousPeakBin = candidatePeakBin, abs(peakBin - previousPeakBin) > maxPeakDriftBins {
             whistleStart = now
@@ -306,51 +310,42 @@ final class WhistleDetector: ObservableObject {
 
         if whistleStart == nil {
             whistleStart = now
+            return
         }
+
+        guard let whistleStart,
+              now.timeIntervalSince(whistleStart) >= minimumWhistleDuration,
+              candidatePeakHistory.count >= minimumCandidateFrames,
+              now.timeIntervalSince(lastCountedWhistleEndedAt) >= countGapSeconds else {
+            if now.timeIntervalSince(lastCountedWhistleEndedAt) < countGapSeconds {
+                let remaining = max(0, countGapSeconds - now.timeIntervalSince(lastCountedWhistleEndedAt))
+                updateDisplayedReason("Whistle gap active (\(Int(ceil(remaining)))s)", isWhistle: false)
+            }
+            return
+        }
+
+        let stability = candidatePeakStdDev()
+        guard stability <= maxCandidateBinStdDev else {
+            self.whistleStart = now
+            candidatePeakHistory = [peakBin]
+            updateDisplayedReason("Pitch is wobbling like voice or music", isWhistle: false)
+            return
+        }
+
+        countedWhistleIsAwaitingEnd = true
+        candidatePeakHistory.removeAll()
+        updateDisplayedReason("Cooker whistle counted", isWhistle: true)
+        onWhistle?()
     }
 
     private func handleNonWhistleCandidate() {
         let now = Date()
-        guard now.timeIntervalSince(lastWhistleCandidateAt) >= minimumSilenceBeforeCompletedWhistle else { return }
-        guard let whistleStart else {
-            clearCandidate()
-            return
+        guard now.timeIntervalSince(lastWhistleCandidateAt) >= minimumSilenceBetweenWhistles else { return }
+        if countedWhistleIsAwaitingEnd {
+            lastCountedWhistleEndedAt = now
+            countedWhistleIsAwaitingEnd = false
         }
-
-        let whistleEndedAt = lastWhistleCandidateAt
-        let duration = whistleEndedAt.timeIntervalSince(whistleStart)
-        let gapSinceLastCount = whistleEndedAt.timeIntervalSince(lastCountedWhistleEndedAt)
-        let stability = candidatePeakStdDev()
-
-        guard duration >= minimumCompletedWhistleDuration else {
-            updateDisplayedReason("Short cooker sound ignored — waiting for a complete whistle", isWhistle: false)
-            clearCandidate()
-            return
-        }
-
-        guard candidatePeakHistory.count >= minimumCandidateFrames else {
-            updateDisplayedReason("Possible whistle ended too quickly", isWhistle: false)
-            clearCandidate()
-            return
-        }
-
-        guard stability <= maxCandidateBinStdDev else {
-            updateDisplayedReason("Pitch wobbled like voice or music", isWhistle: false)
-            clearCandidate()
-            return
-        }
-
-        guard gapSinceLastCount >= countGapSeconds else {
-            let remaining = max(0, countGapSeconds - gapSinceLastCount)
-            updateDisplayedReason("Whistle gap active (\(Int(ceil(remaining)))s)", isWhistle: false)
-            clearCandidate()
-            return
-        }
-
-        lastCountedWhistleEndedAt = whistleEndedAt
         clearCandidate()
-        updateDisplayedReason("Completed cooker whistle counted", isWhistle: true)
-        onWhistle?()
     }
 
     private func clearCandidate() {
@@ -658,11 +653,7 @@ private final class WhistleAudioController: @unchecked Sendable {
         let vocalHarmonicCount = vocalHarmonicCount(magnitudes: magnitudes, peakIndex: peakIndex, peakPower: peakPower, frequencyPerBin: frequencyPerBin, halfSize: halfSize)
         let speechEnergyRatio = speechPower / max(speechPower + bandPower, 0.000_001)
         let isConcentrated = concentration >= minimumConcentration
-        let minimumStrongBandConcentration = max(0.07, minimumConcentration * 0.45)
-        let strongCookerBand = bandRatio >= 0.10
-            && localDominance >= 5.0
-            && confidence >= max(0, minimumConfidence - 0.08)
-            && concentration >= minimumStrongBandConcentration
+        let strongCookerBand = bandRatio >= 0.10 && localDominance >= 5.0 && confidence >= max(0, minimumConfidence - 0.08)
         let speechDominated = speechEnergyRatio > maximumSpeechEnergyRatio
         let vocalHarmonics = vocalHarmonicCount > maximumVocalHarmonicCount && speechEnergyRatio > 0.10
         let musicOrVoiceHarmonics = harmonicRatio > maximumHarmonicRatio && vocalHarmonicCount >= 3 && speechEnergyRatio > 0.08
@@ -788,11 +779,18 @@ nonisolated struct WhistleAnalysisResult: Sendable {
     let peakBin: Int
     let rejectionReason: String
 
+    var inputLevelPercent: Int {
+        let clampedLevel = max(Double(inputLevel), 0.000_001)
+        let decibels = 20.0 * log10(clampedLevel)
+        let normalized = min(max((decibels + 60.0) / 48.0, 0), 1)
+        return Int((normalized * 100).rounded())
+    }
+
     static let empty = WhistleAnalysisResult(isWhistle: false, frequency: 0, confidence: 0, inputLevel: 0, harmonicRatio: 0, voicingScore: 0, concentration: 0, peakBin: 0, rejectionReason: "Listening for whistles…")
 
     static func silent(inputLevel: Float) -> WhistleAnalysisResult {
-        let levelPct = Int((inputLevel * 100).rounded())
-        return WhistleAnalysisResult(isWhistle: false, frequency: 0, confidence: 0, inputLevel: inputLevel, harmonicRatio: 0, voicingScore: 0, concentration: 0, peakBin: 0, rejectionReason: "Listening for whistles… (mic level \(levelPct)%)")
+        let result = WhistleAnalysisResult(isWhistle: false, frequency: 0, confidence: 0, inputLevel: inputLevel, harmonicRatio: 0, voicingScore: 0, concentration: 0, peakBin: 0, rejectionReason: "Listening for whistles…")
+        return result.withRejection("Listening for whistles… (mic level \(result.inputLevelPercent)%)")
     }
 
     static func quiet(inputLevel: Float) -> WhistleAnalysisResult {
