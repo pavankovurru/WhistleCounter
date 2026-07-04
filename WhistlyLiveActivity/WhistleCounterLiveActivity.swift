@@ -5,7 +5,7 @@ import SwiftUI
 struct WhistlyLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: CookingActivityAttributes.self) { context in
-            LockScreenActivityView(state: context.state)
+            LockScreenActivityView(state: context.state, isStale: context.isStale)
                 .activityBackgroundTint(.clear)
                 .activitySystemActionForegroundColor(WhistleLiveColor.orange)
         } dynamicIsland: { context in
@@ -15,7 +15,7 @@ struct WhistlyLiveActivity: Widget {
                 }
 
                 DynamicIslandExpandedRegion(.center) {
-                    IslandCenterStatus(state: context.state)
+                    IslandCenterStatus(state: context.state, isStale: context.isStale)
                 }
 
                 DynamicIslandExpandedRegion(.trailing) {
@@ -43,6 +43,7 @@ struct WhistlyLiveActivity: Widget {
 
 private struct LockScreenActivityView: View {
     var state: CookingActivityAttributes.ContentState
+    var isStale: Bool = false
 
     // Timer needs room for "1:23:45"; whistle needs room for "20/20"
     private var metricWidth: CGFloat { state.isTimer ? 116 : 72 }
@@ -59,7 +60,7 @@ private struct LockScreenActivityView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.78)
 
-                Text(state.simpleStatus)
+                Text(isStale ? state.staleStatus : state.simpleStatus)
                     .font(.system(size: 13, weight: .semibold, design: .rounded))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -80,7 +81,10 @@ private struct LockScreenActivityView: View {
     @ViewBuilder
     private var lockScreenMetric: some View {
         Group {
-            if let range = state.countdownRange {
+            if isStale, state.isTimer, !state.isFinished {
+                // A stale running timer means its end date passed with the app gone.
+                Text("0:00")
+            } else if let range = state.countdownRange {
                 Text(timerInterval: range, countsDown: true)
             } else {
                 Text(state.primaryValue)
@@ -184,6 +188,7 @@ private struct IslandStatusBadge: View {
 
 private struct IslandCenterStatus: View {
     var state: CookingActivityAttributes.ContentState
+    var isStale: Bool = false
 
     var body: some View {
         VStack(spacing: 1) {
@@ -191,7 +196,7 @@ private struct IslandCenterStatus: View {
                 .font(.system(size: 11, weight: .black, design: .rounded))
                 .foregroundStyle(WhistleLiveColor.orange)
                 .lineLimit(1)
-            Text(state.simpleStatus)
+            Text(isStale ? state.staleStatus : state.simpleStatus)
                 .font(.system(size: 11, weight: .bold, design: .rounded))
                 .foregroundStyle(.white.opacity(0.90))
                 .lineLimit(1)
@@ -217,7 +222,7 @@ private struct LiveMetricText: View {
         Group {
             if let countdownRange = state.countdownRange {
                 Text(timerInterval: countdownRange, countsDown: true)
-                    .fixedSize(horizontal: true, vertical: false)
+                    .frame(width: state.countdownWidth(fontSize: fontSize), alignment: .trailing)
             } else {
                 Text(state.primaryValue)
                     .fixedSize(horizontal: true, vertical: false)
@@ -239,7 +244,7 @@ private struct CompactMetricText: View {
         Group {
             if let countdownRange = state.countdownRange {
                 Text(timerInterval: countdownRange, countsDown: true)
-                    .fixedSize(horizontal: true, vertical: false)
+                    .frame(width: state.countdownWidth(fontSize: 12), alignment: .trailing)
             } else {
                 Text(state.primaryValue)
                     .fixedSize(horizontal: true, vertical: false)
@@ -272,7 +277,7 @@ private struct IslandExpandedBottom: View {
                         .monospacedDigit()
                         .foregroundStyle(WhistleLiveColor.mint)
                         .lineLimit(1)
-                        .fixedSize(horizontal: true, vertical: false)
+                        .frame(width: state.countdownWidth(fontSize: 12), alignment: .trailing)
                 } else {
                     Text(state.progressLabel)
                         .font(.system(size: 12, weight: .black, design: .rounded))
@@ -336,6 +341,11 @@ private extension CookingActivityAttributes.ContentState {
         return "\(remainingWhistles) more"
     }
 
+    // Shown when the app stopped feeding the activity (killed or crashed).
+    var staleStatus: String {
+        isTimer ? "Time's up" : "Open Whistly to keep counting"
+    }
+
     var remainingWhistles: Int {
         max(0, target - count)
     }
@@ -350,6 +360,24 @@ private extension CookingActivityAttributes.ContentState {
         // Text(timerInterval:) needs the range to start at NOW, not at startedAt —
         // using startedAt as the lower bound causes the countdown text to render blank.
         return Date.now...endsAt
+    }
+
+    // Text(timerInterval:) reports an oversized ideal width, so fixedSize() lets it
+    // stretch the compact Dynamic Island edge to edge. Countdown text must get an
+    // explicit frame width sized to the digits it will actually show.
+    func countdownWidth(fontSize: CGFloat) -> CGFloat {
+        let remaining = max(0, endsAt?.timeIntervalSinceNow ?? 0)
+        let characters: CGFloat
+        if remaining >= 36_000 {
+            characters = 8    // "11:23:45"
+        } else if remaining >= 3600 {
+            characters = 7    // "1:23:45"
+        } else if remaining >= 600 {
+            characters = 5    // "59:59"
+        } else {
+            characters = 4    // "9:59"
+        }
+        return characters * fontSize * 0.62
     }
 
     var primaryValue: String {

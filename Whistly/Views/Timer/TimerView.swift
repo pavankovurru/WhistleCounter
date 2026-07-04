@@ -7,18 +7,21 @@ struct TimerView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     @Bindable var settings: AppSettings
-    @StateObject private var vm: TimerVM
-    @State private var didLogCompletion = false
-    @State private var didSaveCookbook = false
+    // Owned by ContentView so the timer keeps running when this screen is closed.
+    @ObservedObject var vm: TimerVM
+    @State private var savedCookbookDuration: TimeInterval?
     @State private var startPulse = false
+    @State private var showRunningTimerNotice = false
+    private let cookbook: Cookbook?
     var onClose: () -> Void
 
     private let maxRingMinutes = 240
 
-    init(settings: AppSettings, cookbook: Cookbook?, onClose: @escaping () -> Void) {
+    init(settings: AppSettings, vm: TimerVM, cookbook: Cookbook?, onClose: @escaping () -> Void) {
         self.settings = settings
+        self.vm = vm
+        self.cookbook = cookbook
         self.onClose = onClose
-        _vm = StateObject(wrappedValue: TimerVM(cookbook: cookbook))
     }
 
     private var dark: Bool { settings.darkModeEnabled || colorScheme == .dark }
@@ -34,6 +37,11 @@ struct TimerView: View {
 
                 VStack(spacing: 0) {
                     header
+
+                    if showRunningTimerNotice {
+                        runningTimerNotice
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                    }
 
                     VStack(spacing: 0) {
                         Spacer(minLength: compact ? 10 : 18)
@@ -67,12 +75,22 @@ struct TimerView: View {
                 edgeSwipeBack
             }
         }
+        .onAppear {
+            if !vm.adopt(cookbook: cookbook) {
+                showRunningTimerNotice = true
+            }
+            consumePendingCompletionLog()
+        }
+        .task(id: showRunningTimerNotice) {
+            guard showRunningTimerNotice else { return }
+            try? await Task.sleep(for: .seconds(5))
+            withAnimation(.easeOut(duration: 0.3)) {
+                showRunningTimerNotice = false
+            }
+        }
         .onChange(of: vm.isDone) { _, isDone in
-            if isDone, !didLogCompletion {
-                logTimer()
-                didLogCompletion = true
-            } else if !isDone {
-                didLogCompletion = false
+            if isDone {
+                consumePendingCompletionLog()
             }
         }
         .onChange(of: scenePhase) { _, phase in
@@ -81,8 +99,8 @@ struct TimerView: View {
             }
         }
         .onDisappear {
+            // The timer itself keeps running — only silence a ringing alarm.
             AudioPlayer.shared.stopAlarm()
-            vm.pause()
         }
     }
 
@@ -94,6 +112,18 @@ struct TimerView: View {
             onBack: onClose,
             onReset: { vm.reset() }
         )
+    }
+
+    private var runningTimerNotice: some View {
+        Text("A timer is already running — pause or reset it to start \(cookbook?.name ?? "a new one").")
+            .font(.nunito(12, weight: .black))
+            .foregroundStyle(WhistleTheme.charcoal)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 9)
+            .background(WhistleTheme.sunny, in: Capsule())
+            .padding(.horizontal, 22)
+            .padding(.top, 6)
     }
 
     private var edgeSwipeBack: some View {
@@ -306,9 +336,9 @@ struct TimerView: View {
 
     private func saveCookbookTimerButton() -> some View {
         ChunkyButton(
-            title: "Save to Cookbook",
-            systemImage: "square.and.arrow.down.fill",
-            color: WhistleTheme.sunny,
+            title: isCurrentTimerSaved ? "Saved!" : "Save to Cookbook",
+            systemImage: isCurrentTimerSaved ? "checkmark" : "square.and.arrow.down.fill",
+            color: isCurrentTimerSaved ? WhistleTheme.mint : WhistleTheme.sunny,
             fontSize: 17,
             horizontalPadding: 18,
             verticalPadding: 14,
@@ -318,6 +348,12 @@ struct TimerView: View {
         }
         .frame(maxWidth: 235)
         .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    // "Saved" tracks the exact duration, so changing the time re-arms the button
+    // instead of silently ignoring every tap after the first.
+    private var isCurrentTimerSaved: Bool {
+        savedCookbookDuration == vm.totalDuration
     }
 
     private func presetTextColor(color: Color, active: Bool) -> Color {
@@ -441,10 +477,16 @@ struct TimerView: View {
     }
 
     private func saveTimer() {
-        guard !didSaveCookbook else { return }
-        didSaveCookbook = true
+        guard !isCurrentTimerSaved else { return }
+        savedCookbookDuration = vm.totalDuration
         HapticManager.success(enabled: settings.hapticsEnabled)
         modelContext.insert(Cookbook(name: "Quick \(vm.totalDuration.shortDurationText)", timerDuration: vm.totalDuration, emoji: "⏱", createdAt: Date()))
+    }
+
+    private func consumePendingCompletionLog() {
+        guard vm.needsCompletionLog else { return }
+        vm.needsCompletionLog = false
+        logTimer()
     }
 
     private func logTimer() {

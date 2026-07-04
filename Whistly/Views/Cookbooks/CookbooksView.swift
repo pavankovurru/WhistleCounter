@@ -9,9 +9,15 @@ struct CookbooksView: View {
     @Bindable var settings: AppSettings
     var onCook: (Cookbook) -> Void
 
+    // Identifiable wrapper so the editor uses sheet(item:) — presenting via a
+    // separate isPresented flag can race the state write and open a blank editor.
+    private struct EditorTarget: Identifiable {
+        let id = UUID()
+        let cookbook: Cookbook?
+    }
+
     @State private var filter: CookbookMode = .all
-    @State private var editorCookbook: Cookbook?
-    @State private var showEditor = false
+    @State private var editorTarget: EditorTarget?
     @State private var pendingDeleteCookbook: Cookbook?
     @State private var actionCookbook: Cookbook?
 
@@ -52,8 +58,7 @@ struct CookbooksView: View {
                                     dark: dark,
                                     onCook: { onCook(cookbook) },
                                     onEdit: {
-                                        editorCookbook = cookbook
-                                        showEditor = true
+                                        edit(cookbook)
                                     },
                                     onDelete: {
                                         pendingDeleteCookbook = cookbook
@@ -106,18 +111,17 @@ struct CookbooksView: View {
                 .zIndex(4)
             }
         }
-        .sheet(isPresented: $showEditor) {
-            CookbookEditorSheet(settings: settings, cookbook: editorCookbook) { draft in
-                if let editorCookbook {
-                    editorCookbook.name = draft.name
-                    editorCookbook.emoji = draft.emoji
-                    editorCookbook.whistleTarget = draft.whistleTarget
-                    editorCookbook.timerDuration = draft.timerDuration
-                    editorCookbook.notes = draft.notes
+        .sheet(item: $editorTarget) { target in
+            CookbookEditorSheet(settings: settings, cookbook: target.cookbook) { draft in
+                if let cookbook = target.cookbook {
+                    cookbook.name = draft.name
+                    cookbook.emoji = draft.emoji
+                    cookbook.whistleTarget = draft.whistleTarget
+                    cookbook.timerDuration = draft.timerDuration
+                    cookbook.notes = draft.notes
                 } else {
                     modelContext.insert(draft)
                 }
-                self.editorCookbook = nil
             }
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
@@ -146,8 +150,7 @@ struct CookbooksView: View {
                 verticalPadding: 9.9,
                 cornerRadius: 19.8
             ) {
-                editorCookbook = nil
-                showEditor = true
+                editorTarget = EditorTarget(cookbook: nil)
             }
         }
         .padding(.horizontal, 22)
@@ -162,8 +165,7 @@ struct CookbooksView: View {
     }
 
     private func edit(_ cookbook: Cookbook) {
-        editorCookbook = cookbook
-        showEditor = true
+        editorTarget = EditorTarget(cookbook: cookbook)
     }
 
     private func cookbookActions(for cookbook: Cookbook) -> [AppActionSheetAction] {
@@ -184,8 +186,9 @@ struct CookbooksView: View {
         orderedCookbooks.filter { cookbook in
             switch filter {
             case .all: true
-            case .whistles: cookbook.whistleTarget != nil && cookbook.timerDuration == nil
-            case .timers: cookbook.timerDuration != nil && cookbook.whistleTarget == nil
+            // A cookbook with both setups belongs in both filters.
+            case .whistles: cookbook.whistleTarget != nil
+            case .timers: cookbook.timerDuration != nil
             }
         }
     }
@@ -396,7 +399,8 @@ struct CookbookEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
     @State private var emoji = "🍲"
-    @State private var setupMode = CookbookSetupMode.whistles
+    @State private var wantsWhistles = true
+    @State private var wantsTimer = false
     @State private var whistleTarget = 3
     @State private var minutes = 15
     @State private var notes = ""
@@ -443,9 +447,13 @@ struct CookbookEditorSheet: View {
                 guard let cookbook else { return }
                 name = cookbook.name
                 emoji = cookbook.emoji
-                setupMode = cookbook.timerDuration != nil && cookbook.whistleTarget == nil ? .timer : .whistles
+                wantsWhistles = cookbook.whistleTarget != nil
+                wantsTimer = cookbook.timerDuration != nil
+                if !wantsWhistles && !wantsTimer {
+                    wantsWhistles = true
+                }
                 whistleTarget = cookbook.whistleTarget ?? 3
-                minutes = Int((cookbook.timerDuration ?? 15 * 60) / 60)
+                minutes = max(1, Int((cookbook.timerDuration ?? 15 * 60) / 60))
                 notes = cookbook.notes
             }
         }
@@ -524,33 +532,44 @@ struct CookbookEditorSheet: View {
     }
 
     private func setupCard(compact: Bool) -> some View {
-        editorCard(title: "Setup", icon: setupMode == .whistles ? "mic.fill" : "timer", tint: accentColor, compact: compact) {
+        editorCard(title: "Setup", icon: "checklist", tint: accentColor, compact: compact) {
             HStack(spacing: 10) {
                 setupModeButton(.whistles)
                 setupModeButton(.timer)
             }
 
-            HStack(spacing: compact ? 10 : 14) {
-                valueButton(systemImage: "minus") {
-                    adjustSetupValue(by: -1)
-                }
+            // Both can be on: whistles first, then a follow-up timer.
+            if wantsWhistles {
+                valueRow(compact: compact, value: $whistleTarget, unit: "whistles", range: 1...100, panel: WhistleTheme.cream, accent: WhistleTheme.orange)
+            }
+            if wantsTimer {
+                valueRow(compact: compact, value: $minutes, unit: "minutes", range: 1...720, panel: WhistleTheme.mint.lightened(0.12), accent: WhistleTheme.mint)
+            }
+        }
+    }
 
-                VStack(spacing: 2) {
-                    Text(setupMode == .whistles ? "\(whistleTarget)" : "\(minutes)")
-                        .font(.fredoka(42, weight: .black))
-                        .foregroundStyle(WhistleTheme.charcoal)
-                    Text(setupMode == .whistles ? "whistles" : "minutes")
-                        .font(.nunito(13, weight: .black))
-                        .foregroundStyle(WhistleTheme.charcoal.opacity(0.72))
-                        .textCase(.uppercase)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
-                .background(valuePanelColor, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+    private func valueRow(compact: Bool, value: Binding<Int>, unit: String, range: ClosedRange<Int>, panel: Color, accent: Color) -> some View {
+        HStack(spacing: compact ? 10 : 14) {
+            valueButton(systemImage: "minus", color: accent) {
+                value.wrappedValue = max(range.lowerBound, value.wrappedValue - 1)
+            }
 
-                valueButton(systemImage: "plus") {
-                    adjustSetupValue(by: 1)
-                }
+            VStack(spacing: 2) {
+                Text("\(value.wrappedValue)")
+                    .font(.fredoka(compact ? 32 : 38, weight: .black))
+                    .foregroundStyle(WhistleTheme.charcoal)
+                    .contentTransition(.numericText())
+                Text(unit)
+                    .font(.nunito(12, weight: .black))
+                    .foregroundStyle(WhistleTheme.charcoal.opacity(0.72))
+                    .textCase(.uppercase)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, compact ? 8 : 10)
+            .background(panel, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+
+            valueButton(systemImage: "plus", color: accent) {
+                value.wrappedValue = min(range.upperBound, value.wrappedValue + 1)
             }
         }
     }
@@ -640,24 +659,25 @@ struct CookbookEditorSheet: View {
     }
 
     private func setupModeButton(_ mode: CookbookSetupMode) -> some View {
-        Button {
+        let isActive = mode == .whistles ? wantsWhistles : wantsTimer
+        return Button {
             HapticManager.tap(enabled: settings.hapticsEnabled)
-            setupMode = mode
+            toggleSetupMode(mode)
         } label: {
             HStack(spacing: 7) {
                 Image(systemName: mode == .whistles ? "mic.fill" : "timer")
                 Text(mode.title)
             }
             .font(.fredoka(15, weight: .black))
-            .foregroundStyle(setupMode == mode ? setupModeForeground(for: mode) : WhistleTheme.secondaryText(dark: dark))
+            .foregroundStyle(isActive ? setupModeForeground(for: mode) : WhistleTheme.secondaryText(dark: dark))
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)
             .background {
-                let fill = setupMode == mode ? setupModeColor(for: mode) : WhistleTheme.background(dark: dark)
+                let fill = isActive ? setupModeColor(for: mode) : WhistleTheme.background(dark: dark)
                 ZStack {
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .fill(setupMode == mode ? fill.darkened(0.38).opacity(0.62) : WhistleTheme.shadow(dark: dark))
-                        .offset(y: setupMode == mode ? 2.5 : 1.2)
+                        .fill(isActive ? fill.darkened(0.38).opacity(0.62) : WhistleTheme.shadow(dark: dark))
+                        .offset(y: isActive ? 2.5 : 1.2)
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
                         .fill(fill)
                 }
@@ -666,7 +686,18 @@ struct CookbookEditorSheet: View {
         .buttonStyle(.plain)
     }
 
-    private func valueButton(systemImage: String, action: @escaping () -> Void) -> some View {
+    private func toggleSetupMode(_ mode: CookbookSetupMode) {
+        // At least one setup must stay on.
+        if mode == .whistles {
+            if wantsWhistles && !wantsTimer { return }
+            wantsWhistles.toggle()
+        } else {
+            if wantsTimer && !wantsWhistles { return }
+            wantsTimer.toggle()
+        }
+    }
+
+    private func valueButton(systemImage: String, color: Color, action: @escaping () -> Void) -> some View {
         Button {
             HapticManager.tap(enabled: settings.hapticsEnabled)
             action()
@@ -674,8 +705,8 @@ struct CookbookEditorSheet: View {
             Image(systemName: systemImage)
                 .font(.system(size: 17, weight: .black))
                 .foregroundStyle(WhistleTheme.charcoal)
-                .frame(width: 52, height: 58)
-                .background(accentColor.opacity(0.92), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .frame(width: 52, height: 52)
+                .background(color.opacity(0.92), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
         .buttonStyle(.plain)
     }
@@ -685,16 +716,8 @@ struct CookbookEditorSheet: View {
         return trimmed.isEmpty ? "My Cookbook" : trimmed
     }
 
-    private var setupSummary: String {
-        setupMode == .whistles ? "\(whistleTarget) whistles" : "\(minutes) minutes"
-    }
-
     private var accentColor: Color {
-        setupMode == .whistles ? WhistleTheme.orange : WhistleTheme.mint
-    }
-
-    private var valuePanelColor: Color {
-        setupMode == .whistles ? WhistleTheme.cream : WhistleTheme.mint.lightened(0.12)
+        wantsWhistles ? WhistleTheme.orange : WhistleTheme.mint
     }
 
     private func setupModeColor(for mode: CookbookSetupMode) -> Color {
@@ -714,20 +737,12 @@ struct CookbookEditorSheet: View {
         tint == WhistleTheme.orange || tint == WhistleTheme.charcoal ? .white : WhistleTheme.charcoal
     }
 
-    private func adjustSetupValue(by delta: Int) {
-        if setupMode == .whistles {
-            whistleTarget = min(100, max(1, whistleTarget + delta))
-        } else {
-            minutes = min(180, max(1, minutes + delta))
-        }
-    }
-
     private func saveDraft() {
         let draft = Cookbook(
             id: cookbook?.id ?? UUID(),
             name: displayName,
-            whistleTarget: setupMode == .whistles ? whistleTarget : nil,
-            timerDuration: setupMode == .timer ? TimeInterval(minutes * 60) : nil,
+            whistleTarget: wantsWhistles ? whistleTarget : nil,
+            timerDuration: wantsTimer ? TimeInterval(minutes * 60) : nil,
             notes: notes,
             emoji: emoji,
             createdAt: cookbook?.createdAt ?? Date(),

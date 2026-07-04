@@ -18,6 +18,8 @@ final class WhistlyCounterVM: ObservableObject {
     private var hasLiveActivity = false
     private var isRequestingLiveActivity = false
     private var wantsLiveActivity = false
+    private var keepAliveTask: Task<Void, Never>?
+    private var activeSoundPack: SoundPack = .classic
     private var countGapSeconds: TimeInterval = AppSettings.defaultWhistleCountGapSeconds
     private var lastIncrementAt = Date.distantPast
 
@@ -50,11 +52,17 @@ final class WhistlyCounterVM: ObservableObject {
         refreshMilestone()
     }
 
-    func startListening(sensitivity: WhistleSensitivity, countGapSeconds: TimeInterval) {
+    func startListening(sensitivity: WhistleSensitivity, countGapSeconds: TimeInterval, soundPack: SoundPack) {
         let normalizedGap = AppSettings.normalizedWhistleCountGapSeconds(countGapSeconds)
         self.countGapSeconds = normalizedGap
+        self.activeSoundPack = soundPack
         detector.start(sensitivity: sensitivity, countGapSeconds: normalizedGap)
         mascotState = .bouncing
+        // Ask now so the target-reached notification can be delivered later,
+        // when the app may be backgrounded or the phone locked.
+        Task {
+            _ = await NotificationPermissions.ensureDeliveryAllowed()
+        }
         Task { @MainActor [weak self] in
             await self?.startLiveActivityWhenListening()
         }
@@ -71,8 +79,8 @@ final class WhistlyCounterVM: ObservableObject {
         refreshMilestone()
     }
 
-    func toggleListening(sensitivity: WhistleSensitivity, countGapSeconds: TimeInterval) {
-        detector.isListening ? stopListening() : startListening(sensitivity: sensitivity, countGapSeconds: countGapSeconds)
+    func toggleListening(sensitivity: WhistleSensitivity, countGapSeconds: TimeInterval, soundPack: SoundPack) {
+        detector.isListening ? stopListening() : startListening(sensitivity: sensitivity, countGapSeconds: countGapSeconds, soundPack: soundPack)
     }
 
     func updateCountGap(_ seconds: TimeInterval) {
@@ -83,6 +91,9 @@ final class WhistlyCounterVM: ObservableObject {
 
     func increment() {
         guard count < target else { return }
+        // The alarm and preview tones are pure bells inside the whistle frequency
+        // band — never count the app's own sounds as cooker whistles.
+        guard !AudioPlayer.shared.isAlarmPlaying, AudioPlayer.shared.previewingPack == nil else { return }
         let now = Date()
         guard now.timeIntervalSince(lastIncrementAt) >= countGapSeconds else {
             let remaining = max(0, countGapSeconds - now.timeIntervalSince(lastIncrementAt))
@@ -104,22 +115,36 @@ final class WhistlyCounterVM: ObservableObject {
             mascotState = .celebrating
             showConfetti = true
             showReadyPopup = true
+            playTargetReachedAlarm()
             notifyTargetReached()
         }
     }
 
+    // The alarm is played from the VM, not the view: SwiftUI onChange isn't
+    // guaranteed to fire while the app is listening in the background, and this is
+    // the moment the whole app exists for.
+    private func playTargetReachedAlarm() {
+        let pack = activeSoundPack
+        Task { @MainActor in
+            // Give the detector's audio session a moment to deactivate before the
+            // alarm claims a playback session, or the alarm can be cut off.
+            try? await Task.sleep(for: .milliseconds(200))
+            AudioPlayer.shared.playAlarm(pack: pack)
+        }
+    }
+
     private func notifyTargetReached() {
-        let center = UNUserNotificationCenter.current()
         let completedTarget = target
-        center.getNotificationSettings { settings in
-            guard settings.authorizationStatus.allowsWhistlyNotificationDelivery else { return }
+        Task {
+            guard await NotificationPermissions.ensureDeliveryAllowed() else { return }
             let content = UNMutableNotificationContent()
             content.title = "Cooker is ready!"
             content.body = "\(completedTarget) whistles counted. Time to take it off the heat."
-            content.sound = .default
+            // No notification sound: this only fires while the app is running (it
+            // just detected a whistle), and the in-app alarm is already playing.
             content.interruptionLevel = .timeSensitive
             let request = UNNotificationRequest(identifier: "WhistlyWhistleTarget", content: content, trigger: nil)
-            center.add(request)
+            try? await UNUserNotificationCenter.current().add(request)
         }
     }
 
@@ -150,6 +175,9 @@ final class WhistlyCounterVM: ObservableObject {
             mascotState = .celebrating
             showConfetti = true
             showReadyPopup = true
+            if !wasComplete {
+                playTargetReachedAlarm()
+            }
         }
         refreshMilestone()
         if hasLiveActivity {
@@ -182,6 +210,20 @@ final class WhistlyCounterVM: ObservableObject {
                 }
             } else if shouldKeepActivity {
                 LiveActivityManager.shared.updateWhistle(count: self.count, target: self.target, isListening: self.detector.isListening, isFinished: false)
+                self.startLiveActivityKeepAlive()
+            }
+        }
+    }
+
+    // Refreshes the activity before its rolling staleDate lapses, so it only ever
+    // goes stale when the app was killed and genuinely stopped counting.
+    private func startLiveActivityKeepAlive() {
+        keepAliveTask?.cancel()
+        keepAliveTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(60))
+                guard let self, self.hasLiveActivity, !Task.isCancelled else { return }
+                LiveActivityManager.shared.updateWhistle(count: count, target: target, isListening: detector.isListening, isFinished: false)
             }
         }
     }
@@ -200,6 +242,8 @@ final class WhistlyCounterVM: ObservableObject {
     }
 
     private func endLiveActivity(finalStatus: String, dismissalDelay: TimeInterval = 30) {
+        keepAliveTask?.cancel()
+        keepAliveTask = nil
         wantsLiveActivity = false
         guard hasLiveActivity || isRequestingLiveActivity else { return }
         isRequestingLiveActivity = false
@@ -237,19 +281,6 @@ final class WhistlyCounterVM: ObservableObject {
             milestone = "Halfway there. \(remaining) whistles to go."
         } else {
             milestone = "\(count) of \(target) whistles counted. Keep going."
-        }
-    }
-}
-
-private extension UNAuthorizationStatus {
-    nonisolated var allowsWhistlyNotificationDelivery: Bool {
-        switch self {
-        case .authorized, .provisional, .ephemeral:
-            return true
-        case .notDetermined, .denied:
-            return false
-        @unknown default:
-            return false
         }
     }
 }

@@ -1,14 +1,16 @@
 import SwiftData
 import SwiftUI
+import UIKit
 
 struct WhistlyCounterView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.openURL) private var openURL
 
     @Bindable var settings: AppSettings
     @StateObject private var vm: WhistlyCounterVM
     @State private var didLogCompletion = false
-    @State private var didSaveCookbook = false
+    @State private var savedCookbookTarget: Int?
     @ObservedObject private var audioPlayer = AudioPlayer.shared
     var onClose: () -> Void
     var onStartLinkedTimer: (Cookbook) -> Void
@@ -81,18 +83,32 @@ struct WhistlyCounterView: View {
                             } else if vm.count >= vm.target {
                                 return
                             } else {
-                                vm.toggleListening(sensitivity: sensitivity, countGapSeconds: countGapSeconds)
+                                vm.toggleListening(sensitivity: sensitivity, countGapSeconds: countGapSeconds, soundPack: soundPack)
                             }
                         }
                         .padding(.horizontal, 38)
 
                         detectorStatus
 
-                        ChunkyButton(title: "Save to Cookbook", systemImage: "square.and.arrow.down.fill", color: WhistleTheme.sunny) {
-                            saveSetup()
+                        if vm.showReadyPopup, let linked = vm.sourceCookbook, let linkedDuration = linked.timerDuration {
+                            ChunkyButton(title: "Start \(linkedDuration.shortDurationText) Timer", systemImage: "timer", color: WhistleTheme.mint) {
+                                HapticManager.tap(enabled: settings.hapticsEnabled)
+                                AudioPlayer.shared.stopAlarm()
+                                onStartLinkedTimer(linked)
+                            }
+                            .frame(maxWidth: 235)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                        } else {
+                            ChunkyButton(
+                                title: isCurrentSetupSaved ? "Saved!" : "Save to Cookbook",
+                                systemImage: isCurrentSetupSaved ? "checkmark" : "square.and.arrow.down.fill",
+                                color: isCurrentSetupSaved ? WhistleTheme.mint : WhistleTheme.sunny
+                            ) {
+                                saveSetup()
+                            }
+                            .frame(maxWidth: 235)
+                            .frame(maxWidth: .infinity, alignment: .center)
                         }
-                        .frame(maxWidth: 235)
-                        .frame(maxWidth: .infinity, alignment: .center)
                     }
                     .padding(.horizontal, 22)
                     .frame(maxWidth: .infinity)
@@ -115,7 +131,7 @@ struct WhistlyCounterView: View {
                     logSession()
                     didLogCompletion = true
                 }
-                AudioPlayer.shared.playAlarm(pack: soundPack)
+                // Alarm is played by the VM so it also fires while backgrounded.
                 HapticManager.celebration(enabled: settings.hapticsEnabled)
             }
         }
@@ -188,12 +204,28 @@ struct WhistlyCounterView: View {
     @ViewBuilder
     private var detectorStatus: some View {
         if let errorMessage = vm.detector.errorMessage {
-            Text(errorMessage)
-                .font(.nunito(12, weight: .bold))
-                .foregroundStyle(.red)
-                .multilineTextAlignment(.center)
-                .frame(minHeight: 18)
-                .padding(.horizontal, 36)
+            VStack(spacing: 5) {
+                Text(errorMessage)
+                    .font(.nunito(12, weight: .bold))
+                    .foregroundStyle(.red)
+                    .multilineTextAlignment(.center)
+                    .frame(minHeight: 18)
+                    .padding(.horizontal, 36)
+
+                if vm.detector.permissionDenied {
+                    Button {
+                        if let url = URL(string: UIApplication.openSettingsURLString) {
+                            openURL(url)
+                        }
+                    } label: {
+                        Text("Open Settings")
+                            .font(.nunito(12, weight: .black))
+                            .foregroundStyle(WhistleTheme.orange)
+                            .underline()
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
         } else {
             Text(detectorStatusText)
                 .font(.nunito(12, weight: .bold))
@@ -264,9 +296,15 @@ struct WhistlyCounterView: View {
         return WhistleTheme.charcoal
     }
 
+    // "Saved" tracks the exact target, so changing it re-arms the button instead
+    // of silently ignoring every tap after the first.
+    private var isCurrentSetupSaved: Bool {
+        savedCookbookTarget == vm.target
+    }
+
     private func saveSetup() {
-        guard !didSaveCookbook else { return }
-        didSaveCookbook = true
+        guard !isCurrentSetupSaved else { return }
+        savedCookbookTarget = vm.target
         HapticManager.success(enabled: settings.hapticsEnabled)
         modelContext.insert(Cookbook(name: "Quick \(vm.target)", whistleTarget: vm.target, emoji: "🎙", createdAt: Date()))
     }

@@ -12,6 +12,9 @@ final class TimerVM: ObservableObject {
     @Published var showConfetti = false
 
     var sourceCookbook: Cookbook?
+    // Set when a timer finishes; the view consumes it to log the session. Lives on
+    // the VM (not the view) so a finish that happens off-screen still gets logged.
+    var needsCompletionLog = false
     private var ticker: Timer?
     private var expectedEndDate: Date?
     private var activeSoundPack: SoundPack = .classic
@@ -47,21 +50,43 @@ final class TimerVM: ObservableObject {
         expectedEndDate = Date().addingTimeInterval(remaining)
         isRunning = true
         isDone = false
-        LiveActivityManager.shared.startTimer(title: sourceCookbook?.name ?? "Kitchen Timer", remaining: remaining, total: totalDuration)
+        LiveActivityManager.shared.startTimer(title: sourceCookbook?.name, remaining: remaining, total: totalDuration)
         scheduleNotification()
+        startTicker()
+    }
+
+    /// Reattaches to a timer that was still counting when the app was killed. Its
+    /// Live Activity and completion notification are both still live, so the timer
+    /// simply picks up where it left off instead of being forgotten.
+    func restoreOrphanedTimer(soundPack: SoundPack, haptics: Bool) {
+        guard !isRunning, let restored = LiveActivityManager.shared.restorableRunningTimer() else { return }
+        activeSoundPack = soundPack
+        activeHaptics = haptics
+        totalDuration = restored.total
+        expectedEndDate = restored.endsAt
+        remaining = max(0, restored.endsAt.timeIntervalSinceNow.rounded(.up))
+        isRunning = true
+        isDone = false
+        startTicker()
+    }
+
+    private func startTicker() {
         ticker?.invalidate()
         ticker = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor in
-                self?.tick(soundPack: soundPack, haptics: haptics)
+                guard let self else { return }
+                self.tick(soundPack: self.activeSoundPack, haptics: self.activeHaptics)
             }
         }
     }
 
     func pause() {
-        pause(endLiveActivity: true)
+        pause(keepLiveActivity: true)
     }
 
-    private func pause(endLiveActivity: Bool) {
+    private static let notificationIdentifiers = ["WhistlyTimer", "WhistlyTimerNudge1", "WhistlyTimerNudge2"]
+
+    private func pause(keepLiveActivity: Bool) {
         // Snap remaining to clock BEFORE changing isRunning so the LA update is accurate
         if let end = expectedEndDate {
             remaining = max(0, end.timeIntervalSinceNow.rounded(.up))
@@ -70,9 +95,11 @@ final class TimerVM: ObservableObject {
         expectedEndDate = nil
         ticker?.invalidate()
         ticker = nil
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["WhistlyTimer"])
-        if endLiveActivity {
-            LiveActivityManager.shared.endTimer(finalStatus: "Timer paused", dismissalDelay: 5)
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: Self.notificationIdentifiers)
+        if keepLiveActivity {
+            // Keep the activity alive in a paused state; ending and re-requesting on
+            // resume makes the Dynamic Island replay its expanded intro animation.
+            LiveActivityManager.shared.updateTimer(remaining: remaining, total: totalDuration, isRunning: false, isFinished: false)
         }
     }
 
@@ -80,8 +107,21 @@ final class TimerVM: ObservableObject {
         isRunning ? pause() : start(soundPack: soundPack, haptics: haptics)
     }
 
+    /// Called when the timer screen (re)opens. Applies the tapped cookbook's setup
+    /// unless a timer is already running — the running timer keeps priority.
+    /// Returns false when the tapped cookbook was NOT applied, so the view can tell
+    /// the user why they're looking at a different timer.
+    @discardableResult
+    func adopt(cookbook: Cookbook?) -> Bool {
+        guard let cookbook else { return true }  // quick timer: keep whatever is in progress
+        guard !isRunning else { return sourceCookbook?.id == cookbook.id }
+        sourceCookbook = cookbook
+        setDuration(cookbook.timerDuration ?? totalDuration)
+        return true
+    }
+
     func reset() {
-        pause(endLiveActivity: false)
+        pause(keepLiveActivity: false)
         AudioPlayer.shared.stopAlarm()
         expectedEndDate = nil
         LiveActivityManager.shared.endTimer(finalStatus: "Timer reset")
@@ -89,6 +129,7 @@ final class TimerVM: ObservableObject {
         isDone = false
         showDonePopup = false
         showConfetti = false
+        needsCompletionLog = false
     }
 
     private func tick(soundPack: SoundPack, haptics: Bool) {
@@ -103,7 +144,9 @@ final class TimerVM: ObservableObject {
     func refreshRemainingFromClock(finishIfNeeded: Bool = true) {
         guard let expectedEndDate else { return }
         remaining = max(0, expectedEndDate.timeIntervalSinceNow.rounded(.up))
-        LiveActivityManager.shared.updateTimer(remaining: remaining, total: totalDuration, isRunning: isRunning, isFinished: false)
+        // No Live Activity update here: this runs every tick, and pushing a freshly
+        // recomputed endsAt each second makes the system countdown stutter. The LA
+        // counts down on its own; it only needs updates on start/pause/resume/finish.
         if finishIfNeeded, isRunning, remaining <= 0 {
             finish(soundPack: activeSoundPack, haptics: activeHaptics)
         }
@@ -114,41 +157,45 @@ final class TimerVM: ObservableObject {
         expectedEndDate = nil
         ticker?.invalidate()
         ticker = nil
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["WhistlyTimer"])
+        // The app is alive and ringing, so the un-fired follow-up nudges are noise.
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: Self.notificationIdentifiers)
         isDone = true
         showDonePopup = true
         showConfetti = true
+        needsCompletionLog = true
         LiveActivityManager.shared.endTimer(finalStatus: "Time's up")
         AudioPlayer.shared.playAlarm(pack: soundPack)
         HapticManager.warning(enabled: haptics)
     }
 
     private func scheduleNotification() {
-        let center = UNUserNotificationCenter.current()
-        let notificationDelay = max(1, remaining)
-        center.getNotificationSettings { settings in
-            guard settings.authorizationStatus.allowsWhistlyNotificationDelivery else { return }
-            let content = UNMutableNotificationContent()
-            content.title = "WAKE UP!"
-            content.body = "Something smells amazing!"
-            content.sound = .default
-            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: notificationDelay, repeats: false)
-            let request = UNNotificationRequest(identifier: "WhistlyTimer", content: content, trigger: trigger)
-            center.add(request)
+        guard let endDate = expectedEndDate else { return }
+        Task { @MainActor in
+            guard await NotificationPermissions.ensureDeliveryAllowed() else { return }
+            // The permission prompt can stay up for a while — bail if the user
+            // paused or reset the timer in the meantime.
+            guard isRunning, expectedEndDate == endDate else { return }
+            let center = UNUserNotificationCenter.current()
+            // Main alert at 0:00, plus two follow-up nudges in case the first one
+            // was missed — a kitchen timer can't afford a single 2-second chime.
+            // All are cancelled when the app itself handles the finish.
+            let alerts: [(id: String, delay: TimeInterval, title: String, body: String)] = [
+                ("WhistlyTimer", 0, "WAKE UP!", "Something smells amazing!"),
+                ("WhistlyTimerNudge1", 45, "Still cooking?", "Your timer finished a minute ago."),
+                ("WhistlyTimerNudge2", 150, "Don't forget the stove!", "Your timer finished a while ago.")
+            ]
+            for alert in alerts {
+                let content = UNMutableNotificationContent()
+                content.title = alert.title
+                content.body = alert.body
+                content.sound = .default
+                content.interruptionLevel = .timeSensitive
+                let fireIn = max(1, endDate.timeIntervalSinceNow + alert.delay)
+                let trigger = UNTimeIntervalNotificationTrigger(timeInterval: fireIn, repeats: false)
+                let request = UNNotificationRequest(identifier: alert.id, content: content, trigger: trigger)
+                try? await center.add(request)
+            }
         }
     }
 
-}
-
-private extension UNAuthorizationStatus {
-    nonisolated var allowsWhistlyNotificationDelivery: Bool {
-        switch self {
-        case .authorized, .provisional, .ephemeral:
-            return true
-        case .notDetermined, .denied:
-            return false
-        @unknown default:
-            return false
-        }
-    }
 }

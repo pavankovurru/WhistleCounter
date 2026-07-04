@@ -151,7 +151,17 @@ final class WhistleDetector: ObservableObject {
             }
         }
 
-        notificationObservers = [interruption, routeChange, didBecomeActive]
+        let mediaReset = center.addObserver(
+            forName: AVAudioSession.mediaServicesWereResetNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.handleMediaServicesReset()
+            }
+        }
+
+        notificationObservers = [interruption, routeChange, didBecomeActive, mediaReset]
     }
 
     private func unregisterSessionObservers() {
@@ -170,13 +180,24 @@ final class WhistleDetector: ObservableObject {
         case .ended:
             guard wasInterrupted else { return }
             wasInterrupted = false
-            let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue)
-            guard options.contains(.shouldResume) else { return }
+            guard isListening || isStarting else { return }
+            // Resume even without the .shouldResume hint — it's frequently absent
+            // (declined calls, interruptions while backgrounded), and not resuming
+            // leaves the app deaf while the UI still says "Listening".
             restartListeningInPlace()
             onListeningRecovered?()
         @unknown default:
             break
         }
+    }
+
+    private func handleMediaServicesReset() {
+        // The system audio daemon restarted; the engine and session are invalid
+        // even though nothing else reports an error.
+        guard isListening || isStarting else { return }
+        wasInterrupted = false
+        restartListeningInPlace()
+        onListeningRecovered?()
     }
 
     private func handleRouteChange(reasonValue: UInt) {
@@ -192,7 +213,15 @@ final class WhistleDetector: ObservableObject {
     }
 
     private func handleDidBecomeActive() {
-        guard isListening, !wasInterrupted else { return }
+        guard isListening else { return }
+        if wasInterrupted {
+            // The interruption-ended event never arrived (common when the call
+            // happened while backgrounded). The user is back, so it's over — recover.
+            wasInterrupted = false
+            restartListeningInPlace()
+            onListeningRecovered?()
+            return
+        }
         audioController.checkEngineHealth { [weak self] isHealthy in
             Task { @MainActor in
                 guard let self, !isHealthy else { return }
@@ -487,7 +516,10 @@ private final class WhistleAudioController: @unchecked Sendable {
         let timer = DispatchSource.makeTimerSource(queue: queue)
         timer.schedule(deadline: .now() + 2, repeating: 1)
         timer.setEventHandler { [weak self] in
-            guard let self, self.engine?.isRunning == true else { return }
+            guard let self else { return }
+            // No isRunning check: an engine the system already stopped must also
+            // trigger recovery — a stopped engine is how listening most often dies.
+            // (The detector ignores this while a call interruption is in progress.)
             if Date().timeIntervalSince(self.lastFrameAt) > 2.0 {
                 self.onStaleAudio?()
             }

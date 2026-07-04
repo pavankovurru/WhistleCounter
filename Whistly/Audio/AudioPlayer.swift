@@ -17,8 +17,33 @@ final class AudioPlayer: ObservableObject {
     private var alarmStopTask: Task<Void, Never>?
     private var previewPlayer: AVAudioPlayer?
     private var previewStopTask: Task<Void, Never>?
+    private var effectPlayer: AVAudioPlayer?
     private var isPreviewSessionConfigured = false
 
+    private init() {
+        #if os(iOS)
+        NotificationCenter.default.addObserver(
+            forName: AVAudioSession.interruptionNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            let typeValue = (notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt) ?? 0
+            Task { @MainActor in
+                self?.handleInterruption(typeValue: typeValue)
+            }
+        }
+        #endif
+    }
+
+    private func handleInterruption(typeValue: UInt) {
+        #if os(iOS)
+        guard AVAudioSession.InterruptionType(rawValue: typeValue) == .ended, isAlarmPlaying else { return }
+        // A call paused the alarm mid-ring; pick it back up. The auto-stop
+        // task kept counting, so this can't ring longer than intended.
+        try? AVAudioSession.sharedInstance().setActive(true)
+        alarmPlayer?.play()
+        #endif
+    }
 
     func playWhistle() {
         playResource(name: "whistle_boing", fallback: 1104)
@@ -42,7 +67,7 @@ final class AudioPlayer: ObservableObject {
             alarmPlayer?.play()
             isAlarmPlaying = true
             alarmStopTask = Task { @MainActor in
-                try? await Task.sleep(for: .seconds(30))
+                try? await Task.sleep(for: .seconds(60))
                 stopAlarm()
             }
         } else {
@@ -116,6 +141,8 @@ final class AudioPlayer: ObservableObject {
     private func playResource(name: String, fallback: SystemSoundID) {
         if let url = Bundle.main.url(forResource: name, withExtension: "mp3"),
            let player = try? AVAudioPlayer(contentsOf: url) {
+            // Must stay retained while playing — a local would deallocate mid-sound.
+            effectPlayer = player
             player.play()
         } else {
             AudioServicesPlaySystemSound(fallback)
@@ -137,7 +164,7 @@ final class AudioPlayer: ObservableObject {
         player.play()
         isAlarmPlaying = true
         alarmStopTask = Task { @MainActor in
-            try? await Task.sleep(for: .seconds(30))
+            try? await Task.sleep(for: .seconds(60))
             stopAlarm()
         }
     }
@@ -229,7 +256,12 @@ final class AudioPlayer: ObservableObject {
         #if os(iOS)
         do {
             let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
+            // Leave the detector's .playAndRecord category alone: switching it kills
+            // the live mic tap, and that category already plays through the speaker
+            // (.defaultToSpeaker). Only claim .playback when no record session is set.
+            if session.category != .playAndRecord {
+                try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
+            }
             try session.setActive(true)
         } catch {
             // Fall back to the system sound path if the dedicated alarm session is unavailable.

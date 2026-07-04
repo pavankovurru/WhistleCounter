@@ -8,6 +8,11 @@ final class LiveActivityManager {
     private var currentWhistleActivity: Activity<CookingActivityAttributes>?
     private var currentTimerActivity: Activity<CookingActivityAttributes>?
 
+    // The whistle activity has no natural end date, so give it a rolling stale
+    // window. The VM refreshes it every 60s while listening; if the app is killed
+    // the refreshes stop and the widget can show that it's no longer counting.
+    private var whistleStaleDate: Date { Date().addingTimeInterval(150) }
+
     private init() {}
 
     func startWhistle(title: String, count: Int, target: Int, completion: ((Bool) -> Void)? = nil) {
@@ -21,7 +26,7 @@ final class LiveActivityManager {
             endsAt: nil,
             isFinished: false
         )
-        start(mode: .whistle, state: state, completion: completion)
+        start(mode: .whistle, state: state, staleDate: whistleStaleDate, completion: completion)
     }
 
     func updateWhistle(count: Int, target: Int, isListening: Bool, isFinished: Bool) {
@@ -37,35 +42,47 @@ final class LiveActivityManager {
         update(
             .init(
                 mode: .whistle,
-                title: "Whistly",
+                title: activity.content.state.title,
                 status: status,
                 count: count,
                 target: target,
                 startedAt: activity.content.state.startedAt,
                 endsAt: nil,
                 isFinished: isFinished
-            )
+            ),
+            staleDate: whistleStaleDate
         )
     }
 
-    func startTimer(title: String, remaining: TimeInterval, total: TimeInterval, completion: ((Bool) -> Void)? = nil) {
+    /// `title` nil means "no specific source" — a fresh activity gets the generic
+    /// name, and a resumed one keeps whatever title it already shows (important for
+    /// timers restored after a force-quit, where the cookbook reference is gone).
+    func startTimer(title: String?, remaining: TimeInterval, total: TimeInterval, completion: ((Bool) -> Void)? = nil) {
         let now = Date()
         let endsAt = now.addingTimeInterval(max(1, remaining))
-        start(
+        var state = CookingActivityAttributes.ContentState(
             mode: .timer,
-            state: .init(
-                mode: .timer,
-                title: title,
-                status: "Timer running",
-                count: Int(max(0, remaining).rounded()),
-                target: Int(max(1, total).rounded()),
-                startedAt: now,
-                endsAt: endsAt,
-                isFinished: false
-            ),
-            staleDate: endsAt,
-            completion: completion
+            title: title ?? "Kitchen Timer",
+            status: "Timer running",
+            count: Int(max(0, remaining).rounded()),
+            target: Int(max(1, total).rounded()),
+            startedAt: now,
+            endsAt: endsAt,
+            isFinished: false
         )
+        // Resuming a paused timer: update the existing activity in place — ending it
+        // and requesting a new one makes the Dynamic Island replay its intro animation.
+        // Only possible while the activity is still on screen; if the user swiped it
+        // away (.dismissed) updates go nowhere and we must request a fresh one.
+        if let existing = activity(for: .timer),
+           existing.activityState == .active || existing.activityState == .stale {
+            state.startedAt = existing.content.state.startedAt
+            state.title = title ?? existing.content.state.title
+            update(state, staleDate: endsAt)
+            completion?(true)
+            return
+        }
+        start(mode: .timer, state: state, staleDate: endsAt, completion: completion)
     }
 
     func updateTimer(remaining: TimeInterval, total: TimeInterval, isRunning: Bool, isFinished: Bool) {
@@ -75,7 +92,7 @@ final class LiveActivityManager {
         update(
             .init(
                 mode: .timer,
-                title: "Kitchen Timer",
+                title: activity.content.state.title,
                 status: isFinished ? "Time's up" : (isRunning ? "Timer running" : "Timer paused"),
                 count: Int(max(0, remaining).rounded()),
                 target: Int(max(1, total).rounded()),
@@ -166,6 +183,30 @@ final class LiveActivityManager {
         Task { @MainActor in
             let content = ActivityContent(state: finalState, staleDate: Date())
             await activity.end(content, dismissalPolicy: .after(Date().addingTimeInterval(dismissalDelay)))
+        }
+    }
+
+    /// A running timer activity left over from a previous app session, if any.
+    /// Looking it up also caches it, so it survives `endOrphanedActivities()`.
+    func restorableRunningTimer() -> (endsAt: Date, total: TimeInterval)? {
+        guard let activity = activity(for: .timer) else { return nil }
+        let state = activity.content.state
+        guard !state.isFinished, let endsAt = state.endsAt, endsAt.timeIntervalSinceNow > 1 else { return nil }
+        return (endsAt, TimeInterval(max(1, state.target)))
+    }
+
+    /// Ends activities left behind by a crash or force-quit that nothing in this
+    /// session tracks. Call once at launch, after restoring any running timer.
+    func endOrphanedActivities() {
+        for activity in Activity<CookingActivityAttributes>.activities {
+            if activity.id == currentTimerActivity?.id || activity.id == currentWhistleActivity?.id { continue }
+            Task { @MainActor in
+                var state = activity.content.state
+                state.isFinished = true
+                state.status = state.mode == .timer ? "Timer ended" : "Ended"
+                let content = ActivityContent(state: state, staleDate: Date())
+                await activity.end(content, dismissalPolicy: .after(Date().addingTimeInterval(5)))
+            }
         }
     }
 

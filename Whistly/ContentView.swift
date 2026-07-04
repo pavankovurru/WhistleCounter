@@ -8,6 +8,8 @@ struct ContentView: View {
     @Query(sort: \AppSettings.id) private var settingsRows: [AppSettings]
 
     @StateObject private var cookbookVM = CookbookVM()
+    // App-level so a running timer survives closing the timer screen.
+    @StateObject private var timerVM = TimerVM(cookbook: nil)
     @State private var activeTab: AppTab = .home
     @State private var activeFlow: ActiveFlow?
 
@@ -30,6 +32,7 @@ struct ContentView: View {
         .task {
             ensureSettings()
             cookbookVM.seedIfNeeded(cookbooks: cookbooks, context: modelContext)
+            restoreTimerAndCleanUpActivities()
         }
     }
 
@@ -117,7 +120,7 @@ struct ContentView: View {
             .toolbar(.hidden, for: .navigationBar)
             .toolbar(.hidden, for: .tabBar)
         case .timer(let cookbook):
-            TimerView(settings: settings, cookbook: cookbook) {
+            TimerView(settings: settings, vm: timerVM, cookbook: cookbook) {
                 activeFlow = nil
             }
             .toolbar(.hidden, for: .navigationBar)
@@ -126,11 +129,27 @@ struct ContentView: View {
     }
 
     private func ensureSettings() {
-        if settingsRows.isEmpty {
+        // Both .task call sites can run before the @Query snapshot refreshes, so
+        // check the store directly instead of the snapshot, and dedupe any extra
+        // rows a past race may have created.
+        let existing = (try? modelContext.fetch(FetchDescriptor<AppSettings>())) ?? []
+        guard let keeper = existing.first(where: \.hasCompletedOnboarding) ?? existing.first else {
             modelContext.insert(AppSettings())
-        } else {
-            settingsRows.forEach { $0.repairStoredValuesIfNeeded() }
+            return
         }
+        for row in existing where row !== keeper {
+            modelContext.delete(row)
+        }
+        keeper.repairStoredValuesIfNeeded()
+    }
+
+    private func restoreTimerAndCleanUpActivities() {
+        let settings = settingsRows.first
+        timerVM.restoreOrphanedTimer(
+            soundPack: SoundPack(rawValue: settings?.soundPack ?? "") ?? .classic,
+            haptics: settings?.hapticsEnabled ?? true
+        )
+        LiveActivityManager.shared.endOrphanedActivities()
     }
 
     private func open(_ cookbook: Cookbook) {

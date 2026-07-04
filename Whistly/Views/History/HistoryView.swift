@@ -176,10 +176,20 @@ struct HistoryView: View {
     }
 
     private func saveAsCookbook(_ session: CookingSession) {
+        let name = session.title
+        let target = session.targetWhistles ?? (session.whistleCount > 0 ? session.whistleCount : nil)
+        let duration = session.timerDuration
+        // Repeat taps must not pile up duplicate cookbooks.
+        let existing = (try? modelContext.fetch(FetchDescriptor<Cookbook>())) ?? []
+        guard !existing.contains(where: { $0.name == name && $0.whistleTarget == target && $0.timerDuration == duration }) else {
+            HapticManager.tap(enabled: settings.hapticsEnabled)
+            return
+        }
+        HapticManager.success(enabled: settings.hapticsEnabled)
         modelContext.insert(Cookbook(
-            name: session.title,
-            whistleTarget: session.targetWhistles ?? (session.whistleCount > 0 ? session.whistleCount : nil),
-            timerDuration: session.timerDuration,
+            name: name,
+            whistleTarget: target,
+            timerDuration: duration,
             notes: "Saved from history.",
             emoji: session.emoji
         ))
