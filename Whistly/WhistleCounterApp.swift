@@ -14,6 +14,7 @@ struct WhistlyApp: App {
     init() {
         configureSystemControlAppearance()
         configureTabBarAppearance()
+        WhistlyNotificationDelegate.configure()
     }
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([

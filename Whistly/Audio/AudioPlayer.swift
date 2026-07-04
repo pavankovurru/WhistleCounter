@@ -56,22 +56,66 @@ final class AudioPlayer: ObservableObject {
     func playAlarm(pack: SoundPack) {
         stopAlarmPreview()
         stopAlarm()            // stop & clear the old player first
-        configureAlarmSession() // then set up a fresh session
-        let resourceName = "alarm_\(pack.rawValue.lowercased())"
-        if let url = Bundle.main.url(forResource: resourceName, withExtension: "mp3"),
-           let player = try? AVAudioPlayer(contentsOf: url) {
-            alarmPlayer = player
-            alarmPlayer?.numberOfLoops = -1  // loop until stopped
-            alarmPlayer?.volume = 1
-            alarmPlayer?.prepareToPlay()
-            alarmPlayer?.play()
-            isAlarmPlaying = true
-            alarmStopTask = Task { @MainActor in
-                try? await Task.sleep(for: .seconds(60))
-                stopAlarm()
-            }
+        // If whistle listening is live, pause it for the duration of the alarm:
+        // whistles are ignored while an alarm rings anyway, and its .measurement
+        // session makes alarm playback quiet. Listening resumes on stopAlarm().
+        WhistleDetector.activeDetector?.suspendForAlarm()
+        configureAlarmSession()
+        guard let player = makeAlarmPlayer(pack: pack) else {
+            AudioServicesPlaySystemSound(1005)
+            return
+        }
+        alarmPlayer = player
+        // Report the real playback state — callers use it to decide whether a
+        // backup notification sound is needed.
+        isAlarmPlaying = player.play()
+        if !isAlarmPlaying {
+            // The fast mode-only session tweak wasn't enough; retry once on a full
+            // playback session (slower — it re-routes audio — but most compatible).
+            forcePlaybackSession()
+            isAlarmPlaying = player.play()
+        }
+        if isAlarmPlaying {
+            scheduleAlarmAutoStop()
         } else {
-            startProceduralAlarm(pack: pack)
+            WhistleDetector.activeDetector?.resumeAfterAlarm()
+        }
+    }
+
+    private func makeAlarmPlayer(pack: SoundPack) -> AVAudioPlayer? {
+        let resourceName = "alarm_\(pack.rawValue.lowercased())"
+        let player: AVAudioPlayer?
+        if let url = Bundle.main.url(forResource: resourceName, withExtension: "mp3") {
+            player = try? AVAudioPlayer(contentsOf: url)
+        } else if let data = proceduralAlarmData(pack: pack) {
+            player = try? AVAudioPlayer(data: data)
+        } else {
+            player = nil
+        }
+        guard let player else { return nil }
+        player.numberOfLoops = -1  // loop until stopped
+        player.volume = pack == .zen ? 0.9 : 1
+        player.prepareToPlay()
+        return player
+    }
+
+    // Synthesizing ~5s of WAV takes tens of milliseconds — do it once per pack,
+    // not on the alarm-critical path.
+    private var proceduralAlarmCache: [SoundPack: Data] = [:]
+
+    private func proceduralAlarmData(pack: SoundPack) -> Data? {
+        if let cached = proceduralAlarmCache[pack] {
+            return cached
+        }
+        let data = makeProceduralAlarmWAV(pack: pack)
+        proceduralAlarmCache[pack] = data
+        return data
+    }
+
+    private func scheduleAlarmAutoStop() {
+        alarmStopTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(60))
+            stopAlarm()
         }
     }
 
@@ -116,6 +160,7 @@ final class AudioPlayer: ObservableObject {
     }
 
     func stopAlarm() {
+        let wasPlaying = isAlarmPlaying
         alarmStopTask?.cancel()
         alarmStopTask = nil
         alarmPlayer?.stop()
@@ -128,6 +173,10 @@ final class AudioPlayer: ObservableObject {
         alarmBuffer = nil
         isAlarmPlaying = false
         isPreviewSessionConfigured = false
+        if wasPlaying {
+            // Bring back whistle listening that was paused for this alarm.
+            WhistleDetector.activeDetector?.resumeAfterAlarm()
+        }
     }
 
     func stopAlarmPreview() {
@@ -149,25 +198,6 @@ final class AudioPlayer: ObservableObject {
         }
     }
 
-
-    private func startProceduralAlarm(pack: SoundPack) {
-        guard let data = makeProceduralAlarmWAV(pack: pack),
-              let player = try? AVAudioPlayer(data: data) else {
-            AudioServicesPlaySystemSound(1005)
-            return
-        }
-
-        player.numberOfLoops = -1  // loop until stopped
-        player.volume = pack == .zen ? 0.9 : 1
-        player.prepareToPlay()
-        alarmPlayer = player
-        player.play()
-        isAlarmPlaying = true
-        alarmStopTask = Task { @MainActor in
-            try? await Task.sleep(for: .seconds(60))
-            stopAlarm()
-        }
-    }
 
     private func makeProceduralAlarmWAV(pack: SoundPack) -> Data? {
         let sampleRate: Float = 44_100
@@ -256,16 +286,34 @@ final class AudioPlayer: ObservableObject {
         #if os(iOS)
         do {
             let session = AVAudioSession.sharedInstance()
-            // Leave the detector's .playAndRecord category alone: switching it kills
-            // the live mic tap, and that category already plays through the speaker
-            // (.defaultToSpeaker). Only claim .playback when no record session is set.
-            if session.category != .playAndRecord {
+            if WhistleDetector.hasLiveMic {
+                // A live mic tap is running (timer alarm during listening): changing
+                // the category would kill it, and .playAndRecord+.defaultToSpeaker
+                // already plays audibly. Just make sure the session is active.
+                try session.setActive(true)
+            } else if session.category == .playAndRecord {
+                // Mic→alarm handoff: keep the category (a category change re-routes
+                // audio hardware and costs 1-2s) and only leave .measurement mode,
+                // which is what makes playback quiet. The speaker route is retained
+                // by .defaultToSpeaker. Never deactivate — iOS refuses background
+                // re-activation.
+                try session.setMode(.default)
+                try session.setActive(true)
+            } else {
                 try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
+                try session.setActive(true)
             }
-            try session.setActive(true)
         } catch {
             // Fall back to the system sound path if the dedicated alarm session is unavailable.
         }
+        #endif
+    }
+
+    private func forcePlaybackSession() {
+        #if os(iOS)
+        let session = AVAudioSession.sharedInstance()
+        try? session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
+        try? session.setActive(true)
         #endif
     }
 }

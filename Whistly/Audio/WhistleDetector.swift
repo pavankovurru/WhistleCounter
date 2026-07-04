@@ -6,6 +6,17 @@ import UIKit
 
 @MainActor
 final class WhistleDetector: ObservableObject {
+    /// True while an audio engine is actually capturing. AudioPlayer checks this to
+    /// decide whether it may reconfigure the shared audio session for the alarm.
+    static private(set) var hasLiveMic = false
+
+    /// The detector currently listening, if any — AudioPlayer uses it to suspend
+    /// the mic while an alarm rings (whistles are ignored during alarms anyway,
+    /// and the mic's .measurement session makes alarm playback quiet).
+    static private(set) weak var activeDetector: WhistleDetector?
+
+    private var suspendedForAlarm = false
+
     @Published var isListening = false
     @Published var isStarting = false
     @Published var permissionDenied = false
@@ -63,6 +74,8 @@ final class WhistleDetector: ObservableObject {
 
     func start(sensitivity: WhistleSensitivity, countGapSeconds: TimeInterval) {
         guard !isListening, !isStarting else { return }
+        Self.activeDetector = self
+        suspendedForAlarm = false
         isStarting = true
         errorMessage = nil
         lastSensitivity = sensitivity
@@ -88,9 +101,33 @@ final class WhistleDetector: ObservableObject {
         }
     }
 
-    func stop() {
+    /// `keepAudioSessionActive` is for the mic→alarm handoff: iOS often refuses to
+    /// re-activate an audio session from the background, so when an alarm is about
+    /// to play, the session must stay active across the stop.
+    /// Pauses capture while an alarm rings, keeping the session active and all
+    /// listening state intact. Resumed by `resumeAfterAlarm()` when the alarm ends.
+    func suspendForAlarm() {
+        guard isListening, !suspendedForAlarm else { return }
+        suspendedForAlarm = true
+        Self.hasLiveMic = false
+        audioController.stop(deactivateSession: false)
+    }
+
+    func resumeAfterAlarm() {
+        guard suspendedForAlarm else { return }
+        suspendedForAlarm = false
+        guard let sensitivity = lastSensitivity else { return }
+        startAudioController(sensitivity: sensitivity)
+    }
+
+    func stop(keepAudioSessionActive: Bool = false) {
+        Self.hasLiveMic = false
+        if Self.activeDetector === self {
+            Self.activeDetector = nil
+        }
+        suspendedForAlarm = false
         unregisterSessionObservers()
-        audioController.stop(deactivateSession: true)
+        audioController.stop(deactivateSession: !keepAudioSessionActive)
         isListening = false
         isStarting = false
         whistleStart = nil
@@ -103,6 +140,10 @@ final class WhistleDetector: ObservableObject {
     }
 
     private func restartListeningInPlace() {
+        // While an alarm has the session, recovery restarts must wait — they'd
+        // flip the session mode back and silence the alarm. resumeAfterAlarm()
+        // brings the engine back when the alarm ends.
+        guard !suspendedForAlarm else { return }
         guard let sensitivity = lastSensitivity else { return }
         audioController.stop(deactivateSession: false)
         whistleStart = nil
@@ -213,7 +254,7 @@ final class WhistleDetector: ObservableObject {
     }
 
     private func handleDidBecomeActive() {
-        guard isListening else { return }
+        guard isListening, !suspendedForAlarm else { return }
         if wasInterrupted {
             // The interruption-ended event never arrived (common when the call
             // happened while backgrounded). The user is back, so it's over — recover.
@@ -272,6 +313,7 @@ final class WhistleDetector: ObservableObject {
             onStarted: { [weak self] in
                 Task { @MainActor in
                     guard let self else { return }
+                    Self.hasLiveMic = true
                     self.isListening = true
                     self.isStarting = false
                     self.errorMessage = nil
@@ -280,6 +322,7 @@ final class WhistleDetector: ObservableObject {
             onFailed: { [weak self] message in
                 Task { @MainActor in
                     guard let self else { return }
+                    Self.hasLiveMic = false
                     self.isListening = false
                     self.isStarting = false
                     self.errorMessage = message

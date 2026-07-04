@@ -49,7 +49,20 @@ final class WhistlyCounterVM: ObservableObject {
                 self?.refreshMilestone()
             }
             .store(in: &cancellables)
+        NotificationCenter.default.publisher(for: .whistlyAlarmNotificationAcknowledged)
+            .sink { [weak self] note in
+                guard (note.userInfo?["identifier"] as? String) == "WhistlyWhistleTarget" else { return }
+                self?.acknowledgeAlarmNotification()
+            }
+            .store(in: &cancellables)
         refreshMilestone()
+    }
+
+    /// Clearing or tapping the target-reached notification acknowledges the
+    /// completed count — reset so the screen doesn't sit on "Stop Sound".
+    private func acknowledgeAlarmNotification() {
+        guard count >= target else { return }
+        reset()
     }
 
     func startListening(sensitivity: WhistleSensitivity, countGapSeconds: TimeInterval, soundPack: SoundPack) {
@@ -110,7 +123,10 @@ final class WhistlyCounterVM: ObservableObject {
         }
 
         if count >= target {
-            detector.stop()
+            // Keep the session alive across the mic→alarm handoff — deactivating it
+            // here made the alarm silently fail when backgrounded, because iOS
+            // refuses to re-activate an audio session from the background.
+            detector.stop(keepAudioSessionActive: true)
             endLiveActivity(finalStatus: "Target reached")
             mascotState = .celebrating
             showConfetti = true
@@ -124,25 +140,23 @@ final class WhistlyCounterVM: ObservableObject {
     // guaranteed to fire while the app is listening in the background, and this is
     // the moment the whole app exists for.
     private func playTargetReachedAlarm() {
-        let pack = activeSoundPack
-        Task { @MainActor in
-            // Give the detector's audio session a moment to deactivate before the
-            // alarm claims a playback session, or the alarm can be cut off.
-            try? await Task.sleep(for: .milliseconds(200))
-            AudioPlayer.shared.playAlarm(pack: pack)
-        }
+        AudioPlayer.shared.playAlarm(pack: activeSoundPack)
     }
 
     private func notifyTargetReached() {
         let completedTarget = target
+        // The alarm was started synchronously just before this, so its state is
+        // truthful here: if it's audibly playing, the notification stays silent;
+        // if playback failed, the notification carries the full alarm sound.
+        let backupSound = AudioPlayer.shared.isAlarmPlaying ? nil : activeSoundPack.notificationSound
         Task {
             guard await NotificationPermissions.ensureDeliveryAllowed() else { return }
             let content = UNMutableNotificationContent()
             content.title = "Cooker is ready!"
             content.body = "\(completedTarget) whistles counted. Time to take it off the heat."
-            // No notification sound: this only fires while the app is running (it
-            // just detected a whistle), and the in-app alarm is already playing.
+            content.sound = backupSound
             content.interruptionLevel = .timeSensitive
+            content.categoryIdentifier = WhistlyNotificationDelegate.alarmCategoryID
             let request = UNNotificationRequest(identifier: "WhistlyWhistleTarget", content: content, trigger: nil)
             try? await UNUserNotificationCenter.current().add(request)
         }
@@ -170,7 +184,7 @@ final class WhistlyCounterVM: ObservableObject {
             showConfetti = false
             mascotState = detector.isListening ? .bouncing : .idle
         } else if isComplete {
-            detector.stop()
+            detector.stop(keepAudioSessionActive: !wasComplete)
             endLiveActivity(finalStatus: "Target reached")
             mascotState = .celebrating
             showConfetti = true

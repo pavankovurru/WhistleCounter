@@ -20,11 +20,32 @@ final class TimerVM: ObservableObject {
     private var activeSoundPack: SoundPack = .classic
     private var activeHaptics = true
 
+    private var alarmAckCancellable: AnyCancellable?
+
     init(cookbook: Cookbook?) {
         let duration = cookbook?.timerDuration ?? 30 * 60
         self.sourceCookbook = cookbook
         self.totalDuration = duration
         self.remaining = duration
+        alarmAckCancellable = NotificationCenter.default.publisher(for: .whistlyAlarmNotificationAcknowledged)
+            .sink { [weak self] note in
+                guard let identifier = note.userInfo?["identifier"] as? String,
+                      identifier.hasPrefix("WhistlyTimer") else { return }
+                self?.acknowledgeAlarmNotification()
+            }
+    }
+
+    /// Clearing or tapping the timer notification acknowledges the completed timer:
+    /// reset it so the screen doesn't sit on "Stop Sound", and so opening the app
+    /// doesn't immediately start the alarm for a timer the user already dismissed.
+    private func acknowledgeAlarmNotification() {
+        // Only reset a *completed* timer — a stale notification tapped later must
+        // not kill a fresh running timer.
+        let expired = expectedEndDate.map { $0.timeIntervalSinceNow <= 0 } ?? false
+        guard isDone || (isRunning && expired) else { return }
+        let pendingLog = needsCompletionLog || !isDone
+        reset()
+        needsCompletionLog = pendingLog
     }
 
     var progress: Double {
@@ -176,6 +197,7 @@ final class TimerVM: ObservableObject {
             // paused or reset the timer in the meantime.
             guard isRunning, expectedEndDate == endDate else { return }
             let center = UNUserNotificationCenter.current()
+            let sound = activeSoundPack.notificationSound
             // Main alert at 0:00, plus two follow-up nudges in case the first one
             // was missed — a kitchen timer can't afford a single 2-second chime.
             // All are cancelled when the app itself handles the finish.
@@ -188,8 +210,9 @@ final class TimerVM: ObservableObject {
                 let content = UNMutableNotificationContent()
                 content.title = alert.title
                 content.body = alert.body
-                content.sound = .default
+                content.sound = sound
                 content.interruptionLevel = .timeSensitive
+                content.categoryIdentifier = WhistlyNotificationDelegate.alarmCategoryID
                 let fireIn = max(1, endDate.timeIntervalSinceNow + alert.delay)
                 let trigger = UNTimeIntervalNotificationTrigger(timeInterval: fireIn, repeats: false)
                 let request = UNNotificationRequest(identifier: alert.id, content: content, trigger: trigger)

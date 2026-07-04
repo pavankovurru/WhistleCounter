@@ -78,7 +78,11 @@ struct WhistlyCounterView: View {
                             iconWidth: 20
                         ) {
                             HapticManager.tap(enabled: settings.hapticsEnabled)
-                            if audioPlayer.isAlarmPlaying || vm.showReadyPopup {
+                            if audioPlayer.isAlarmPlaying, !vm.showReadyPopup {
+                                // A ringing TIMER alarm — silence it without touching
+                                // the whistle count that's still in progress.
+                                AudioPlayer.shared.stopAlarm()
+                            } else if audioPlayer.isAlarmPlaying || vm.showReadyPopup {
                                 resetCounter()
                             } else if vm.count >= vm.target {
                                 return
